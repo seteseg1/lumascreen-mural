@@ -160,7 +160,7 @@ export default function App() {
   useEffect(() => {
     if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin) return;
 
-    let timeout: NodeJS.Timeout;
+    let timeout: any;
 
     const handleRotation = () => {
       if (showInterstellarQr) {
