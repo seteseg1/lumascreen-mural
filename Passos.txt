@@ -1,0 +1,611 @@
+⚙️ Opção 2: Recursos de Moderação (Controle do Dono da Festa)
+Para que você possa vender esse produto com segurança para buffets e salões de festa:
+
+Painel do Administrador: Criar uma tela secreta (ou painel administrativo) para você ou o cerimonialista do evento aprovar as fotos antes de elas irem para o telão (evitando que algum engraçadinho mande uma foto inadequada).
+
+Botão de Deletar: Uma forma simples de remover uma foto do telão em tempo real caso o cliente peça.
+
+🌐 Opção 3: Preparação para Produção (Colocar na Internet de verdade)
+Atualmente, o sistema roda na rede local da sua casa (192.168.x.x). Se você quiser levar o Totem para um evento na rua ou em um salão comercial:
+
+Deploy Online: Hospedar o site do Totem e do Celular de graça em plataformas como Vercel ou Netlify.
+
+QR Code Dinâmico: Fazer o QR Code da tela gerar automaticamente o link correto da internet para que qualquer pessoa de qualquer lugar acesse sem você precisar configurar IP manualmente toda vez.
+
+Qual dessas direções você acha que faz mais sentido para o seu momento atual com o projeto?
+
+
+Seu documento PDF com a especificação técnica do Modo Híbrido está pronto!
+
+especificacao_modo_hibrido
+ PDF 
+Aberto
+
+Sim, com certeza absoluta! Esse comportamento híbrido é, inclusive, o nível mais alto de engenharia de software para sistemas de ponto de venda e totens físicos de grande escala (como os totens do McDonald's, por exemplo).
+
+Como funciona esse "Modo Híbrido" inteligente na prática:
+A Fila de Espera (Buffer Local): Toda vez que o convidado tira uma foto, em vez de enviar direto para o Supabase, o sistema primeiro salva a foto de forma rápida em um banco de dados interno e invisível do próprio navegador do totem (chamado IndexedDB).
+
+O Detector de Conexão: O sistema fica constantemente vigiando o sinal de internet (usando a linha de código nativa navigator.onLine).
+
+Se estiver ONLINE: Ele pega a foto que acabou de salvar localmente, envia para o Supabase na nuvem e limpa a fila.
+
+Se estiver OFFLINE: Ele percebe que a rede caiu e não exibe erro. O sistema salva a foto silenciosamente apenas no armazenamento local e continua exibindo no telão (pois o telão é programado para ler tanto o banco da nuvem quanto o banco local do navegador do totem).
+
+A Auto-Sincronização: Assim que a internet volta (por exemplo, após uma oscilação de 5 minutos), o sistema percebe que está online novamente, varre o armazenamento local em busca de fotos que ainda não foram enviadas para a nuvem e faz o upload de todas elas de forma automática e silenciosa em segundo plano!
+
+Onde essas fotos ficam guardadas localmente?
+No navegador do totem, o IndexedDB funciona como uma pasta local super segura. Ele não tem limitação rígida de tamanho (pode armazenar gigabytes de fotos) e, mesmo se você fechar o navegador ou desligar o totem por acidente, as fotos continuam salvas lá dentro e não se perdem.
+
+O Plano de Ação Seguro:
+Gerei um arquivo PDF detalhado com toda a especificação de arquitetura desse modo híbrido. Guarde este arquivo com muito carinho para usarmos de referência.
+
+Como combinamos que "em time que está ganhando não se mexe", recomendo fazermos o seguinte:
+
+Fase 1 (Agora): Teste o totem do seu lado usando o IP local (192.168...) para garantir que a tela física, a câmera e a resolução estão funcionando perfeitamente.
+
+Fase 2 (Próximo passo): Vamos colocar o seu site na Vercel (Hospedagem Web) para você ter a comodidade de atualizar e acessar de qualquer lugar.
+
+Fase 3 (Versão 2.0): Com o seu evento entregue e com calma, implementamos essa lógica do PDF para deixar o seu totem 100% blindado contra quedas de internet.
+
+Quer fazer um teste rápido de abrir o link do IP da sua máquina aí no navegador do totem físico agora para ver se ele renderiza o layout direitinho?
+
+
+
+App.tsx
+
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from './supabaseClient';
+import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, QrCode, Trash2, Check, Monitor, Smartphone, ShieldCheck, ChevronLeft, ChevronRight, SmartphoneIcon } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface Message {
+  id: string;
+  guest_name: string;
+  message: string;
+  photo_url: string;
+  created_at: string;
+  approved: boolean;
+}
+
+export default function App() {
+  // Estados de visualização: 'selection', 'totem', 'mobile' ou o novo 'viewer' (mural no celular)
+  const [view, setView] = useState<'selection' | 'totem' | 'mobile' | 'viewer'>('selection');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [name, setName] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [totemUrl, setTotemUrl] = useState('');
+
+  // Controle do Slide ativo
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true') setIsAdmin(true);
+    
+    const url = `${window.location.origin}?view=mobile`;
+    setTotemUrl(url);
+
+    if (params.get('view') === 'mobile') setView('mobile');
+  }, []);
+
+  // Monitoramento das fotos em tempo real (Ativo tanto no Telão quanto no celular do Convidado)
+  useEffect(() => {
+    if (view !== 'totem' && view !== 'viewer') return;
+
+    const fetchInitialMessages = async () => {
+      let query = supabase.from('guestbook_messages').select('*');
+      
+      // Apenas o Admin vê fotos não aprovadas
+      if (!isAdmin) query = query.eq('approved', true);
+
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error) console.error('Erro:', error.message);
+      if (data) setMessages(data as Message[]);
+    };
+
+    fetchInitialMessages();
+
+    const channel = supabase
+      .channel('realtime_totem_messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guestbook_messages' }, 
+        (payload) => {
+          const newMessage = payload.new as Message;
+          if (isAdmin || newMessage.approved) {
+            setMessages((prev) => [newMessage, ...prev]);
+            setCurrentSlideIndex(0); // Foca na foto mais nova
+          }
+        }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'guestbook_messages' },
+        (payload) => {
+          const updatedMessage = payload.new as Message;
+          if (isAdmin) {
+            setMessages((prev) => prev.map((msg) => msg.id === updatedMessage.id ? updatedMessage : msg));
+          } else {
+            if (updatedMessage.approved) {
+              setMessages((prev) => {
+                if (prev.some((msg) => msg.id === updatedMessage.id)) return prev;
+                setCurrentSlideIndex(0);
+                return [updatedMessage, ...prev];
+              });
+            } else {
+              setMessages((prev) => {
+                const filtered = prev.filter((msg) => msg.id !== updatedMessage.id);
+                setCurrentSlideIndex(0);
+                return filtered;
+              });
+            }
+          }
+        }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'guestbook_messages' },
+        (payload) => {
+          setMessages((prev) => {
+            const filtered = prev.filter((msg) => msg.id !== payload.old.id);
+            setCurrentSlideIndex(0);
+            return filtered;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [view, isAdmin]);
+
+  // Efeito para passar o slide automaticamente a cada 5 segundos
+  useEffect(() => {
+    if ((view !== 'totem' && view !== 'viewer') || messages.length <= 1 || isAdmin) return;
+
+    const interval = setInterval(() => {
+      setCurrentSlideIndex((prevIndex) => (prevIndex + 1) % messages.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [view, messages, isAdmin]);
+
+  const handleApproveMessage = async (id: string) => {
+    try {
+      const { error } = await supabase.from('guestbook_messages').update({ approved: true }).eq('id', id);
+      if (error) throw error;
+    } catch (err: any) { alert(`Erro: ${err.message}`); }
+  };
+
+  const handleDeleteMessage = async (id: string) => {
+    if (!confirm('Deseja apagar esta foto do telão?')) return;
+    try {
+      const { error } = await supabase.from('guestbook_messages').delete().eq('id', id);
+      if (error) throw error;
+    } catch (err: any) { alert(`Erro: ${err.message}`); }
+  };
+
+  const handleFileChange = () => {
+    const file = fileInputRef.current?.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPreviewUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleMobileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return alert('Por favor, digite seu nome.');
+    setLoading(true);
+    try {
+      let photoUrl = '';
+      const file = fileInputRef.current?.files?.[0];
+      if (file) {
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('guestbook-photos').upload(fileName, file);
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('guestbook-photos').getPublicUrl(fileName);
+        photoUrl = data.publicUrl;
+      }
+      const { error: dbError } = await supabase.from('guestbook_messages').insert([{ guest_name: name, message: message, photo_url: photoUrl, approved: false }]);
+      if (dbError) throw dbError;
+      setSuccess(true);
+      setName(''); setMessage(''); setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) { alert(`Erro: ${err.message}`); } finally { setLoading(false); }
+  };
+
+  // Redireciona o convidado para o visualizador de mural dinâmico do celular
+  const handleFinishMobile = () => {
+    setSuccess(false);
+    setView('viewer');
+  };
+
+  // ================= TELA DE SELEÇÃO INICIAL =================
+  if (view === 'selection') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f172a] text-white p-6 font-sans">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+          <div className="bg-blue-600 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
+            <Camera className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-4xl font-black tracking-tighter sm:text-5xl mb-3 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+            TOTEM LUMA PRO
+          </h1>
+          <p className="text-slate-400 text-lg font-medium">Sistema de Mural Interativo em Tempo Real</p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+          <motion.button
+            whileHover={{ scale: 1.02, translateY: -5 }} whileTap={{ scale: 0.98 }}
+            onClick={() => setView('totem')}
+            className="bg-slate-800/50 border border-slate-700 p-8 rounded-[2.5rem] flex flex-col items-center text-center group hover:bg-slate-800 transition-all shadow-xl"
+          >
+            <div className="bg-blue-500/10 p-5 rounded-2xl mb-6 group-hover:bg-blue-500 transition-colors">
+              <Monitor className="w-12 h-12 text-blue-500 group-hover:text-white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">Modo Telão</h2>
+            <p className="text-slate-400 leading-relaxed">Exiba as fotos em alta definição no projetor ou TV do evento.</p>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02, translateY: -5 }} whileTap={{ scale: 0.98 }}
+            onClick={() => setView('mobile')}
+            className="bg-slate-800/50 border border-slate-700 p-8 rounded-[2.5rem] flex flex-col items-center text-center group hover:bg-slate-800 transition-all shadow-xl"
+          >
+            <div className="bg-emerald-500/10 p-5 rounded-2xl mb-6 group-hover:bg-emerald-500 transition-colors">
+              <Smartphone className="w-12 h-12 text-emerald-500 group-hover:text-white" />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">Modo Convidado</h2>
+            <p className="text-slate-400 leading-relaxed">Acesse a interface de envio para tirar selfies e escrever mensagens.</p>
+          </motion.button>
+        </div>
+
+        <footer className="mt-16 text-slate-500 text-sm font-semibold tracking-widest uppercase">
+          Versão 2.0 • Realtime Photo Sharing
+        </footer>
+      </div>
+    );
+  }
+
+  // ================= TELA DO CELULAR DO CONVIDADO (FORMULÁRIO) =================
+  if (view === 'mobile') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans">
+        <div className="w-full max-w-md flex-1 py-8">
+          {success ? (
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border border-slate-100 mt-12">
+              <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-12 h-12 text-emerald-500 animate-bounce" />
+              </div>
+              <h2 className="text-3xl font-black mb-4">Enviado!</h2>
+              <p className="text-slate-500 mb-8 font-medium">Sua foto foi para a moderação e logo aparecerá no telão da festa.</p>
+              
+              <div className="flex flex-col gap-3">
+                <button onClick={() => setSuccess(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-2xl transition shadow-lg shadow-blue-100">
+                  ENVIAR OUTRA FOTO
+                </button>
+                <button onClick={handleFinishMobile} className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black py-4 rounded-2xl transition flex items-center justify-center gap-2">
+                  <Monitor className="w-4 h-4" /> VER MURAL NO CELULAR
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <form onSubmit={handleMobileSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-6">
+              <div className="text-center mb-2">
+                <h2 className="text-3xl font-black text-slate-900 leading-tight">Deixe sua<br/>Lembrança! 📸</h2>
+                <p className="text-slate-400 font-bold mt-2 uppercase tracking-tighter text-xs">Apareça ao vivo no telão</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Quem é você?</label>
+                  <input type="text" placeholder="Seu nome aqui" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl focus:border-emerald-400 outline-none font-bold transition-all" required />
+                </div>
+
+                <div>
+                  <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Recado especial</label>
+                  <textarea placeholder="Sua mensagem..." rows={3} value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl focus:border-emerald-400 outline-none font-bold transition-all resize-none" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <input type="file" accept="image/*" capture="user" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                {previewUrl ? (
+                  <div className="relative rounded-3xl overflow-hidden h-56 group">
+                    <img src={previewUrl} alt="Preview" className="w-full max-h-64 object-cover" />                    <button type="button" onClick={() => {setPreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = '';}} className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-xl font-bold shadow-lg">Remover</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full border-4 border-dashed border-slate-100 rounded-[2rem] py-10 bg-slate-50 hover:bg-slate-100 flex flex-col items-center gap-3 transition-all">
+                    <Camera className="w-12 h-12 text-slate-300" />
+                    <span className="font-black text-slate-400">TIRAR SELFIE</span>
+                  </button>
+                )}
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black py-5 rounded-[2rem] flex items-center justify-center gap-3 shadow-xl shadow-blue-100 transition-all text-xl mt-2">
+                {loading ? <RefreshCw className="animate-spin" /> : <><Send /> ENVIAR AGORA</>}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ================= TELA DO CELULAR DO CONVIDADO (VIEWER/MURAL NO CELULAR) =================
+  if (view === 'viewer') {
+    const activeSlide = messages[currentSlideIndex];
+
+    return (
+      <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans p-4 justify-between">
+        
+        {/* Header Compacto de visualização */}
+        <header className="flex items-center justify-between py-4 border-b border-slate-900">
+          <div className="flex items-center gap-2">
+            <SmartphoneIcon className="w-5 h-5 text-emerald-400 animate-pulse" />
+            <span className="text-sm font-black tracking-widest uppercase text-slate-300">Mural no Celular</span>
+          </div>
+          <span className="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full font-bold">
+            {messages.length} {messages.length === 1 ? 'Foto' : 'Fotos'}
+          </span>
+        </header>
+
+        {/* Slide adaptado para a tela vertical do celular */}
+        <main className="flex-1 flex items-center justify-center my-6 overflow-hidden">
+          {messages.length === 0 ? (
+            <div className="text-center space-y-4">
+              <ImageIcon className="w-16 h-16 text-slate-800 mx-auto" />
+              <p className="text-slate-500 font-medium">Nenhuma foto aprovada ainda.</p>
+            </div>
+          ) : (
+            <div className="w-full max-w-sm flex flex-col items-center relative">
+              <AnimatePresence mode="wait">
+                {activeSlide && (
+                  <motion.div
+                    key={activeSlide.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.5 }}
+                    className="bg-white p-4 pb-6 rounded-sm shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col w-full border border-slate-200"
+                  >
+                    <div className="w-full h-[40vh] bg-slate-100 overflow-hidden relative shadow-inner flex items-center justify-center">
+                      {activeSlide.photo_url ? (
+                        <img src={activeSlide.photo_url} alt="Selfie" className="w-full h-full object-contain bg-[#0a0a0a]" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
+                          <ImageIcon className="w-20 h-20" />
+                          <span className="text-sm font-bold text-slate-400">Recado da Festa</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 px-2 text-center">
+                      <p className="text-slate-800 text-lg md:text-xl font-medium italic line-clamp-3 leading-snug">
+                        "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
+                      </p>
+                      <div className="mt-4 border-t border-slate-100 pt-3">
+                        <span className="text-blue-600 font-black uppercase text-sm tracking-wider">{activeSlide.guest_name}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </main>
+
+        {/* Rodapé fixo com o CTA de enviar outra foto */}
+        <footer className="pb-4">
+          <button
+            onClick={() => setView('mobile')}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-emerald-950/30 flex items-center justify-center gap-2 text-md transition-all"
+          >
+            <Camera className="w-5 h-5" /> QUERO MANDAR MAIS UMA!
+          </button>
+        </footer>
+      </div>
+    );
+  }
+
+  // ================= TELA DO TOTEM (TELÃO DO SALÃO) =================
+  const activeSlide = messages[currentSlideIndex];
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans overflow-hidden">
+      
+      {/* 1. SE NÃO HOUVER NENHUMA FOTO EXIBIDA */}
+      {messages.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative bg-[radial-gradient(circle_at_center,_#1e293b,_#050505)]">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center gap-8 max-w-xl bg-slate-900/40 p-12 rounded-[3.5rem] border border-slate-800 backdrop-blur-md shadow-[0_30px_100px_rgba(0,0,0,0.8)] relative z-10"
+          >
+            <div className="bg-blue-600 p-6 rounded-3xl animate-pulse shadow-[0_0_50px_rgba(37,99,235,0.4)]">
+              <Camera className="w-16 h-16 text-white" />
+            </div>
+            
+            <div className="space-y-3">
+              <h2 className="text-4xl font-black leading-tight tracking-tight">O Mural está pronto!</h2>
+              <p className="text-slate-400 text-lg font-medium">Envie a primeira foto ou mensagem da festa!</p>
+            </div>
+
+            {/* QR CODE GIGANTE CENTRAL */}
+            <div className="bg-white p-5 rounded-[2rem] shadow-[0_20px_50px_rgba(255,255,255,0.1)] transition hover:scale-105 duration-300">
+              {totemUrl && <QRCodeSVG value={totemUrl} size={250} level="H" />}
+            </div>
+
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest animate-bounce mt-4">
+              Aponte a câmera do celular para participar
+            </p>
+          </motion.div>
+        </div>
+      ) : (
+        <>
+          {/* 2. HEADER DA TELA DO TOTEM ATIVO */}
+          <header className="bg-[#0f172a] border-b border-slate-800 p-6 flex items-center justify-between shadow-2xl relative z-20">
+            <div className="flex items-center gap-6">
+              <div className="bg-blue-600 p-4 rounded-3xl shadow-[0_0_30px_rgba(37,99,235,0.3)]">
+                <Camera className="w-10 h-10 text-white" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-black tracking-tighter uppercase text-blue-400">Mural Interativo</h1>
+                <p className="text-slate-400 font-bold text-lg">Deixe sua selfie e mensagem gravadas ao vivo!</p>
+                {isAdmin && <span className="inline-block mt-2 bg-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">Painel de Moderação</span>}
+              </div>
+            </div>
+
+            {/* QR CODE GIGANTE HEADER */}
+            <div className="flex items-center gap-8 bg-black/50 p-5 rounded-[2.5rem] border border-slate-700 backdrop-blur-md">
+              <div className="text-right">
+                <p className="text-3xl font-black text-white leading-none mb-1">PARTICIPE!</p>
+                <p className="text-slate-400 font-bold text-sm">Aponte a câmera do celular</p>
+              </div>
+              <div className="bg-white p-4 rounded-[1.8rem] shadow-[0_0_50px_rgba(255,255,255,0.15)]">
+                {totemUrl && <QRCodeSVG value={totemUrl} size={130} level="H" />}
+              </div>
+            </div>
+          </header>
+
+          {/* 3. MURAL DO TOTEM (GRID PARA ADMIN, SLIDES PARA MURAL COMUM) */}
+          <main className="flex-1 p-6 bg-[radial-gradient(circle_at_50%_-20%,_#1e293b,_#050505)] flex items-center justify-center overflow-hidden">
+            
+            {/* MODO ADMIN: Painel de Gerenciamento de Cards */}
+            {isAdmin ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-h-full overflow-y-auto p-4">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg) => (
+                    <motion.div
+                      key={msg.id} layout
+                      initial={{ opacity: 0, scale: 0.5, y: 100 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      whileHover={{ y: -10, transition: { duration: 0.2 } }}
+                      className={`bg-white p-4 pb-8 rounded-sm shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] flex flex-col w-full max-w-[320px] mx-auto relative group ${!msg.approved ? 'ring-4 ring-amber-500' : ''}`}
+                    >
+                      {!msg.approved && (
+                        <div className="absolute -top-4 -left-4 bg-amber-500 text-black text-[10px] font-black px-4 py-2 rounded-full uppercase shadow-xl z-50 flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4" /> Aguardando
+                        </div>
+                      )}
+
+                      <div className="absolute -top-3 -right-3 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!msg.approved && (
+                          <button onClick={() => handleApproveMessage(msg.id)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-2xl shadow-xl transition-all hover:scale-110">
+                            <Check className="w-6 h-6" />
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteMessage(msg.id)} className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl shadow-xl transition-all hover:scale-110">
+                          <Trash2 className="w-6 h-6" />
+                        </button>
+                      </div>
+
+                      <div className="aspect-square w-full bg-slate-100 overflow-hidden border border-slate-100">
+                        {msg.photo_url ? (
+                          <img src={msg.photo_url} alt="Selfie" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
+                            <ImageIcon className="w-20 h-20" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-6 px-2 text-center flex-1 flex flex-col justify-between min-h-[120px]">
+                        <p className="text-slate-700 text-2xl font-medium tracking-tight leading-snug italic overflow-hidden">
+                          "{msg.message || 'Sem palavras para essa festa!'}"
+                        </p>
+                        <div className="mt-6 flex flex-col border-t border-slate-100 pt-4">
+                          <span className="text-blue-600 font-black uppercase text-sm tracking-widest">{msg.guest_name}</span>
+                          <span className="text-[10px] text-slate-400 font-bold mt-1">
+                            {new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            ) : (
+              
+              /* MODO TELÃO COMUM: Carrossel Dinâmico Centralizado */
+              <div className="relative w-full max-w-[650px] h-[80vh] flex flex-col items-center justify-center p-4">
+                <AnimatePresence mode="wait">
+                  {activeSlide && (
+                    <motion.div
+                      key={activeSlide.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.6 }}
+                      className="bg-white p-5 pb-8 rounded-sm shadow-[0_50px_100px_rgba(0,0,0,0.9)] flex flex-col w-full border border-slate-200 max-h-full overflow-hidden"
+                    >
+                      <div className="w-full h-[50vh] bg-slate-100 overflow-hidden border border-slate-100 relative shadow-inner flex items-center justify-center">
+                        {activeSlide.photo_url ? (
+                          <img src={activeSlide.photo_url} alt="Selfie" className="w-full h-full object-contain bg-[#0a0a0a]" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
+                            <ImageIcon className="w-32 h-32" />
+                            <span className="text-lg font-bold text-slate-400">Recado da Festa</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-6 px-4 text-center flex-1 flex flex-col justify-center">
+                        <p className="text-slate-800 text-2xl md:text-3xl font-medium tracking-tight leading-normal italic line-clamp-3">
+                          "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
+                        </p>
+                        <div className="mt-4 flex flex-col border-t border-slate-100 pt-4">
+                          <span className="text-blue-600 font-black uppercase text-lg tracking-widest">{activeSlide.guest_name}</span>
+                          <span className="text-[10px] text-slate-400 font-bold mt-1">
+                            {new Date(activeSlide.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Controles manuais (Setas) */}
+                {messages.length > 1 && (
+                  <div className="absolute top-1/2 -translate-y-1/2 -left-24 -right-24 flex justify-between pointer-events-none hidden md:flex">
+                    <button 
+                      onClick={() => setCurrentSlideIndex((prev) => (prev - 1 + messages.length) % messages.length)}
+                      className="pointer-events-auto bg-slate-900/60 hover:bg-slate-900 text-white p-4 rounded-full border border-slate-800 backdrop-blur-md shadow-2xl transition"
+                    >
+                      <ChevronLeft className="w-8 h-8" />
+                    </button>
+                    <button 
+                      onClick={() => setCurrentSlideIndex((prev) => (prev + 1) % messages.length)}
+                      className="pointer-events-auto bg-slate-900/60 hover:bg-slate-900 text-white p-4 rounded-full border border-slate-800 backdrop-blur-md shadow-2xl transition"
+                    >
+                      <ChevronRight className="w-8 h-8" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Dots indicadores */}
+                {messages.length > 1 && (
+                  <div className="flex gap-2 mt-6 justify-center">
+                    {messages.map((_, idx) => (
+                      <span 
+                        key={idx}
+                        className={`h-2 rounded-full transition-all duration-300 ${idx === currentSlideIndex ? 'w-8 bg-blue-500' : 'w-2 bg-slate-800'}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </>
+      )}
+    </div>
+  );
+}
