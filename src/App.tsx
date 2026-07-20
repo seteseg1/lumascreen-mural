@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, Trash2, Check, Smartphone, ShieldCheck } from 'lucide-react';
+import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, Trash2, Check, Smartphone, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
+import AdminLogin from './AdminLogin'; 
+import MasterAdmin from './MasterAdmin'; 
 
 function LogoLumaScreen({ className = "w-full h-auto" }: { className?: string }) {
   return (
@@ -32,6 +34,8 @@ interface Message {
 export default function App() {
   const [view, setView] = useState<'totem' | 'mobile' | 'viewer'>('totem');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMaster, setIsMaster] = useState(false); 
+  const [isAuthenticated, setIsAuthenticated] = useState(false); 
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,34 +52,103 @@ export default function App() {
   const [currentEvent, setCurrentEvent] = useState('geral');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
 
+  const [isHardwareBlocked, setIsHardwareBlocked] = useState(false);
+  const [hardwareBlockMessage, setHardwareBlockMessage] = useState('');
+  
+  const masterChannelRef = useRef<any>(null);
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    
-    const eventParam = params.get('event') || 'geral';
-    setCurrentEvent(eventParam);
+    const fetchEventConfig = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const eventParam = params.get('event') || 'geral';
+      const totemParam = params.get('totem');
+      setCurrentEvent(eventParam);
+      
+      if (params.get('admin') === 'true') setIsAdmin(true);
+      if (params.get('master') === 'true') setIsMaster(true);
+      if (params.get('view') === 'mobile') setView('mobile');
 
-    const bgParam = params.get('bg');
-    if (bgParam) {
-      setBackgroundImageUrl(`https://lh3.googleusercontent.com/d/${bgParam}`);
-    } else {
-      setBackgroundImageUrl("https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop");
-    }
+      const url = `${window.location.origin}?view=mobile&event=${eventParam}${totemParam ? `&totem=${totemParam}` : ''}`;
+      setTotemUrl(url);
 
-    if (params.get('admin') === 'true') setIsAdmin(true);
-    
-    const url = `${window.location.origin}?view=mobile&event=${eventParam}`;
-    setTotemUrl(url);
+      if (params.get('view') !== 'mobile' && !params.get('master') && totemParam) {
+        // Puxa toda a listagem para fazer a busca case-insensitive de forma segura no frontend
+        const { data } = await supabase
+          .from('totens_management')
+          .select('*');
 
-    if (params.get('view') === 'mobile') setView('mobile');
+        if (data) {
+          const activeTotem = data.find(t => t.totem_id.toLowerCase() === totemParam.toLowerCase());
+          
+          if (activeTotem) {
+            if (!activeTotem.status || activeTotem.current_allowed_event.toLowerCase() !== eventParam.toLowerCase()) {
+              setIsHardwareBlocked(true);
+              setHardwareBlockMessage(activeTotem.blocked_message);
+            } else {
+              setIsHardwareBlocked(false);
+            }
+          } else {
+            // Caso o totem digitado na URL não exista na base de dados
+            setIsHardwareBlocked(true);
+            setHardwareBlockMessage('Equipamento não homologado no sistema master.');
+          }
+        }
+
+        masterChannelRef.current = supabase
+          .channel('hardware_safety')
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'totens_management' }, (payload: any) => {
+            const updated = payload.new;
+            // Valida em tempo real se a atualização foi referente a este totem específico
+            if (updated.totem_id.toLowerCase() === totemParam.toLowerCase()) {
+              if (!updated.status || updated.current_allowed_event.toLowerCase() !== eventParam.toLowerCase()) {
+                setIsHardwareBlocked(true);
+                setHardwareBlockMessage(updated.blocked_message);
+              } else {
+                setIsHardwareBlocked(false);
+              }
+            }
+          })
+          .subscribe();
+      }
+
+      try {
+        const { data: configData } = await supabase
+          .from('events_config')
+          .select('*')
+          .eq('event_id', eventParam)
+          .single();
+
+        if (configData && configData.bg_drive_id) {
+          setBackgroundImageUrl(`https://lh3.googleusercontent.com/d/${configData.bg_drive_id}`);
+        } else {
+          const bgParam = params.get('bg');
+          if (bgParam) {
+            setBackgroundImageUrl(`https://lh3.googleusercontent.com/d/${bgParam}`);
+          } else {
+            setBackgroundImageUrl("https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=1200&auto=format&fit=crop");
+          }
+        }
+      } catch (err: any) {
+        console.error("Erro ao buscar configuração do evento:", err);
+      }
+    };
+
+    fetchEventConfig();
+
+    return () => {
+      if (masterChannelRef.current) {
+        supabase.removeChannel(masterChannelRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
     if (view !== 'totem' && view !== 'viewer') return;
+    if (isHardwareBlocked) return;
 
     const fetchMessages = async () => {
       let query = supabase.from('guestbook_messages').select('*').eq('event_id', currentEvent);
       
-      // Correção: Garante que a query saiba se é admin diretamente do link para evitar delay de estado
       const isUrlAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
       if (!isUrlAdmin) query = query.eq('approved', true);
 
@@ -155,10 +228,10 @@ export default function App() {
       supabase.removeChannel(channel); 
       clearInterval(pollingInterval);
     };
-  }, [view, currentEvent]);
+  }, [view, currentEvent, isHardwareBlocked, isAdmin]);
 
   useEffect(() => {
-    if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin) return;
+    if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin || isHardwareBlocked) return;
 
     let timeout: any;
 
@@ -183,7 +256,7 @@ export default function App() {
 
     handleRotation();
     return () => clearTimeout(timeout);
-  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex]);
+  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex, isHardwareBlocked]);
 
   const handleApproveMessage = async (id: string) => {
     try {
@@ -241,7 +314,31 @@ export default function App() {
     setView('viewer');
   };
 
-  // ================= TELA DO CELULAR DO CONVIDADO (FORMULÁRIO) =================
+  if (isMaster) {
+    return <MasterAdmin />;
+  }
+
+  if (isHardwareBlocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-xl bg-slate-900/50 p-10 rounded-[3rem] border border-red-500/20 shadow-2xl backdrop-blur-md flex flex-col gap-6">
+          <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto border border-red-500/30 animate-pulse">
+            <ShieldAlert className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-3xl font-black text-red-400 tracking-tight">DISPOSITIVO SUSPENSO</h2>
+          <p className="text-slate-300 text-lg font-bold leading-relaxed">{hardwareBlockMessage}</p>
+          <div className="border-t border-slate-800 pt-4 mt-2">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">KlimpTV Enterprise Services</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (isAdmin && !isAuthenticated) {
+    return <AdminLogin onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
   if (view === 'mobile') {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans">
@@ -310,7 +407,6 @@ export default function App() {
     );
   }
 
-  // ================= TELA DO CELULAR DO CONVIDADO (VIEWER/MURAL NO CELULAR) =================
   if (view === 'viewer') {
     const activeSlide = messages[currentSlideIndex];
 
@@ -330,7 +426,7 @@ export default function App() {
           {messages.length === 0 ? (
             <div className="text-center space-y-4">
               <ImageIcon className="w-16 h-16 text-slate-800 mx-auto" />
-              <p className="text-slate-500 font-medium">Nenhuma foto aprovada ainda.</p>
+              <p className="text-slate-500 font-medium">Nenhuma foto approved ainda.</p>
             </div>
           ) : (
             <div className="w-full max-w-sm flex flex-col items-center relative">
@@ -422,12 +518,10 @@ export default function App() {
     </div>
   );
 
-  // ================= TELA DO TOTEM (TELÃO DO SALÃO) =================
   const activeSlide = messages[currentSlideIndex];
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans overflow-hidden">
-      {/* Correção: Se for Administrador, ignora a trava do QR Code gigante para abrir o painel direto */}
       {(!isAdmin && (messages.length === 0 || showInterstellarQr)) ? (
         <LargeQrCodeScreen />
       ) : (
@@ -459,7 +553,6 @@ export default function App() {
 
           <main className="flex-1 p-6 bg-[radial-gradient(circle_at_50%_-20%,_#1e293b,_#050505)] flex items-center justify-center overflow-hidden">
             {isAdmin ? (
-              // Correção: Mostra um aviso amigável de espera dentro do painel se o evento estiver vazio
               messages.length === 0 ? (
                 <div className="text-center py-20 space-y-4 relative z-20">
                   <RefreshCw className="w-12 h-12 text-slate-600 animate-spin mx-auto" />
@@ -481,7 +574,7 @@ export default function App() {
                           </div>
                         )}
 
-                        <div className="absolute -top-3 -right-3 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute -top-3 -right-3 flex gap-2 z-50 transition-opacity">
                           {!msg.approved && (
                             <button onClick={() => handleApproveMessage(msg.id)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-2xl shadow-xl transition-all">
                               <Check className="w-6 h-6" />
