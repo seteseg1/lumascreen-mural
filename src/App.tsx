@@ -5,6 +5,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminLogin from './AdminLogin'; 
 import MasterAdmin from './MasterAdmin'; 
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 function LogoLumaScreen({ className = "w-full h-auto" }: { className?: string }) {
   return (
@@ -32,10 +34,10 @@ interface Message {
 }
 
 export default function App() {
-  const [view, setView] = useState<'totem' | 'mobile' | 'viewer'>('totem');
+  const [view, setView] = useState<'totem' | 'mobile' | 'viewer' | 'gallery'>('totem');
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false); 
-  const [isAuthenticated, setIsAuthenticated] = useState(false); 
+  const [isUrlAdminAuthenticated, setIsUrlAdminAuthenticated] = useState(false); 
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,12 +69,12 @@ export default function App() {
       if (params.get('admin') === 'true') setIsAdmin(true);
       if (params.get('master') === 'true') setIsMaster(true);
       if (params.get('view') === 'mobile') setView('mobile');
+      if (params.get('view') === 'gallery') setView('gallery');
 
       const url = `${window.location.origin}?view=mobile&event=${eventParam}${totemParam ? `&totem=${totemParam}` : ''}`;
       setTotemUrl(url);
 
-      if (params.get('view') !== 'mobile' && !params.get('master') && totemParam) {
-        // Puxa toda a listagem para fazer a busca case-insensitive de forma segura no frontend
+      if (params.get('view') !== 'mobile' && params.get('view') !== 'gallery' && !params.get('master') && totemParam) {
         const { data } = await supabase
           .from('totens_management')
           .select('*');
@@ -88,7 +90,6 @@ export default function App() {
               setIsHardwareBlocked(false);
             }
           } else {
-            // Caso o totem digitado na URL não exista na base de dados
             setIsHardwareBlocked(true);
             setHardwareBlockMessage('Equipamento não homologado no sistema master.');
           }
@@ -98,7 +99,6 @@ export default function App() {
           .channel('hardware_safety')
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'totens_management' }, (payload: any) => {
             const updated = payload.new;
-            // Valida em tempo real se a atualização foi referente a este totem específico
             if (updated.totem_id.toLowerCase() === totemParam.toLowerCase()) {
               if (!updated.status || updated.current_allowed_event.toLowerCase() !== eventParam.toLowerCase()) {
                 setIsHardwareBlocked(true);
@@ -143,14 +143,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'totem' && view !== 'viewer') return;
+    if (view !== 'totem' && view !== 'viewer' && view !== 'gallery') return;
     if (isHardwareBlocked) return;
 
     const fetchMessages = async () => {
       let query = supabase.from('guestbook_messages').select('*').eq('event_id', currentEvent);
       
       const isUrlAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
-      if (!isUrlAdmin) query = query.eq('approved', true);
+      if (!isUrlAdmin && view !== 'gallery') query = query.eq('approved', true);
 
       const { data, error } = await query
         .order('created_at', { ascending: false })
@@ -181,7 +181,7 @@ export default function App() {
           const newMessage = payload.new as Message;
           const isUrlAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
           
-          if (newMessage.event_id === currentEvent && (isUrlAdmin || newMessage.approved)) {
+          if (newMessage.event_id === currentEvent && (isUrlAdmin || view === 'gallery' || newMessage.approved)) {
             setMessages((prev) => {
               if (prev.some(m => m.id === newMessage.id)) return prev;
               return [newMessage, ...prev];
@@ -199,7 +199,7 @@ export default function App() {
 
           const isUrlAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
 
-          if (isUrlAdmin) {
+          if (isUrlAdmin || view === 'gallery') {
             setMessages((prev) => prev.map((msg) => msg.id === updatedMessage.id ? updatedMessage : msg));
           } else {
             if (updatedMessage.approved) {
@@ -335,8 +335,84 @@ export default function App() {
     );
   }
 
-  if (isAdmin && !isAuthenticated) {
-    return <AdminLogin onLoginSuccess={() => setIsAuthenticated(true)} />;
+  if (isAdmin && !isUrlAdminAuthenticated) {
+    return <AdminLogin onLoginSuccess={() => setIsUrlAdminAuthenticated(true)} currentEvent={currentEvent} />;
+  }
+
+  // ==========================================
+  // VIEW DA GALERIA PÚBLICA (PACK DE DOWNLOAD)
+  // ==========================================
+  if (view === 'gallery') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white p-8 font-sans">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center border-b border-slate-800 pb-6 mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-blue-400 tracking-wider font-mono">LUMASCREEN GALLERY</h1>
+            <p className="text-slate-400 mt-1 font-medium">Pack de fotos do evento: <span className="text-white font-bold uppercase">{currentEvent}</span></p>
+          </div>
+          <button 
+            onClick={async () => {
+              try {
+                const validPhotos = messages.filter(m => m.approved && m.photo_url);
+
+                if (validPhotos.length === 0) {
+                  alert("Não há fotos aprovadas neste evento para baixar.");
+                  return;
+                }
+
+                alert("Iniciando a compactação das fotos. Aguarde um instante...");
+                const zip = new JSZip();
+                
+                await Promise.all(
+                  validPhotos.map(async (msg, index) => {
+                    try {
+                      const response = await fetch(msg.photo_url);
+                      const blob = await response.blob();
+                      const fileName = `${msg.guest_name.replace(/[/\\?%*:|"<>\s]/g, '_')}_${index + 1}.jpg`;
+                      zip.file(fileName, blob);
+                    } catch (fetchErr) {
+                      console.error(`Erro ao baixar a foto ${index + 1}:`, fetchErr);
+                    }
+                  })
+                );
+
+                const zipContent = await zip.generateAsync({ type: 'blob' });
+                saveAs(zipContent, `pack-fotos-${currentEvent}.zip`);
+                
+              } catch (err: any) {
+                alert(`Erro ao gerar o arquivo ZIP: ${err.message}`);
+              }
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-4 rounded-2xl shadow-lg transition-all transform active:scale-95 text-md"
+          >
+            📦 BAIXAR TODAS AS FOTOS (.ZIP)
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
+          {messages.filter(m => m.approved).length === 0 ? (
+            <p className="text-slate-500 font-medium col-span-full text-center py-10">Nenhuma foto aprovada disponível neste pack ainda.</p>
+          ) : (
+            messages.filter(m => m.approved).map((msg) => (
+              <div key={msg.id} className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-800/60 shadow-xl group relative">
+                <div className="aspect-square w-full bg-slate-950 overflow-hidden">
+                  {msg.photo_url ? (
+                    <img src={msg.photo_url} alt="Selfie" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-700">
+                      <ImageIcon className="w-12 h-12" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 bg-slate-900 border-t border-slate-800/40">
+                  <p className="text-xs text-blue-400 font-black uppercase truncate">De: {msg.guest_name}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (view === 'mobile') {
@@ -426,7 +502,7 @@ export default function App() {
           {messages.length === 0 ? (
             <div className="text-center space-y-4">
               <ImageIcon className="w-16 h-16 text-slate-800 mx-auto" />
-              <p className="text-slate-500 font-medium">Nenhuma foto approved ainda.</p>
+              <p className="text-slate-500 font-medium">Nenhuma foto aprovada ainda.</p>
             </div>
           ) : (
             <div className="w-full max-w-sm flex flex-col items-center relative">
@@ -532,10 +608,21 @@ export default function App() {
                 <LogoLumaScreen />
               </div>
               {isAdmin && (
-                <div className="border-l border-slate-800 pl-6 hidden lg:block">
+                <div className="border-l border-slate-800 pl-6 hidden lg:block flex items-center gap-2">
                   <span className="inline-block bg-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">
                     Moderação: {currentEvent.toUpperCase()}
                   </span>
+                  
+                  <button
+                    onClick={() => {
+                      const galleryUrl = `${window.location.origin}/?view=gallery&event=${currentEvent}`;
+                      navigator.clipboard.writeText(galleryUrl);
+                      alert(`Link do Pack de Fotos copiado! Envie para o cliente: ${galleryUrl}`);
+                    }}
+                    className="ml-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    🔗 COPIAR LINK DO PACK
+                  </button>
                 </div>
               )}
             </div>

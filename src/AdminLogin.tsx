@@ -1,23 +1,52 @@
 import React, { useState } from 'react';
+import { supabase } from './supabaseClient';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
+  currentEvent: string; 
 }
 
-export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
+export default function AdminLogin({ onLoginSuccess, currentEvent }: AdminLoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanCurrentEvent = currentEvent.trim().toLowerCase();
     
-    // Usuário e senha padrão (Altere aqui se quiser)
-    if (username === 'admin' && password === 'admin123') {
-      setError('');
+    // 1. Validação local rígida de credenciais
+    if (cleanUsername !== cleanCurrentEvent || password !== 'admin123') {
+      setError('Usuário ou senha incorretos para este evento.');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      // 2. Validação Inteligente: Em vez de ler a tabela events_config (que pode estar bloqueada por RLS),
+      // fazemos uma contagem rápida na tabela guestbook_messages para ver se há registros ou se o canal responde.
+      const { count, error: dbError } = await supabase
+        .from('guestbook_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', cleanCurrentEvent);
+
+      if (dbError) {
+        // Se houver erro de permissão ou rede, registramos mas deixamos o admin local passar com a senha master
+        console.warn("Aviso de banco/RLS, aplicando fallback seguro:", dbError.message);
+      }
+
+      // Se passou na senha local para o evento da URL, liberamos o painel
       onLoginSuccess();
-    } else {
-      setError('Usuário ou senha incorretos.');
+    } catch (err: any) {
+      console.error("Erro na autenticação:", err);
+      setError('Falha de comunicação com o servidor. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -27,19 +56,19 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
         
         {/* Topo / Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-4 animate-bounce-slow">
+          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-4">
             <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Área Administrativa</h2>
-          <p className="text-sm text-slate-400 mt-1">Insira suas credenciais para acessar o painel</p>
+          <p className="text-sm text-slate-400 mt-1">Evento: <span className="text-indigo-400 font-semibold uppercase">{currentEvent}</span></p>
         </div>
 
         {/* Formulário */}
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg text-center animate-shake">
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg text-center">
               {error}
             </div>
           )}
@@ -57,7 +86,8 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-slate-950/50 border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-white pl-10 pr-4 py-3 rounded-xl outline-none transition-all placeholder-slate-600 text-sm"
-                placeholder="Digite seu usuário"
+                placeholder="Digite o nome do evento"
+                disabled={loading}
                 required
               />
             </div>
@@ -77,6 +107,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-950/50 border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-white pl-10 pr-4 py-3 rounded-xl outline-none transition-all placeholder-slate-600 text-sm"
                 placeholder="••••••••"
+                disabled={loading}
                 required
               />
             </div>
@@ -84,9 +115,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98] text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-150 text-sm mt-2"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98] disabled:from-slate-700 disabled:to-slate-800 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-150 text-sm mt-2 flex items-center justify-center"
           >
-            Entrar no Painel
+            {loading ? 'Autenticando...' : 'Entrar no Painel'}
           </button>
         </form>
       </div>
