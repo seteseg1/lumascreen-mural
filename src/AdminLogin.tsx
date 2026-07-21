@@ -1,124 +1,90 @@
 import React, { useState } from 'react';
+import { Shield, Lock, RefreshCw } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
-  currentEvent: string; 
+  currentEvent: string;
 }
 
 export default function AdminLogin({ onLoginSuccess, currentEvent }: AdminLoginProps) {
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('Senha incorreta para este evento.');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-    const cleanUsername = username.trim().toLowerCase();
-    const cleanCurrentEvent = currentEvent.trim().toLowerCase();
-    
-    // 1. Validação local rígida de credenciais
-    if (cleanUsername !== cleanCurrentEvent || password !== 'admin123') {
-      setError('Usuário ou senha incorretos para este evento.');
-      return;
-    }
-
     setLoading(true);
-    
-    try {
-      // 2. Validação Inteligente: Em vez de ler a tabela events_config (que pode estar bloqueada por RLS),
-      // fazemos uma contagem rápida na tabela guestbook_messages para ver se há registros ou se o canal responde.
-      const { count, error: dbError } = await supabase
-        .from('guestbook_messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', cleanCurrentEvent);
+    setError(false);
 
-      if (dbError) {
-        // Se houver erro de permissão ou rede, registramos mas deixamos o admin local passar com a senha master
-        console.warn("Aviso de banco/RLS, aplicando fallback seguro:", dbError.message);
+    try {
+      // Consulta a tabela events_config no Supabase para o evento atual
+      const { data, error: dbError } = await supabase
+        .from('events_config')
+        .select('admin_password')
+        .eq('event_id', currentEvent)
+        .single();
+
+      if (dbError || !data) {
+        // Se o evento não estiver cadastrado na tabela events_config, usa uma senha padrão ou avisa
+        setErrorMessage('Evento não configurado no banco de dados.');
+        setError(true);
+        setLoading(false);
+        return;
       }
 
-      // Se passou na senha local para o evento da URL, liberamos o painel
-      onLoginSuccess();
+      // Compara a senha digitada com a senha salva no banco de dados do Supabase
+      if (password.trim() === data.admin_password) {
+        setError(false);
+        onLoginSuccess();
+      } else {
+        setErrorMessage('Senha incorreta para este evento.');
+        setError(true);
+      }
     } catch (err: any) {
-      console.error("Erro na autenticação:", err);
-      setError('Falha de comunicação com o servidor. Tente novamente.');
+      console.error('Erro ao validar login:', err);
+      setErrorMessage('Erro ao conectar com o banco de dados.');
+      setError(true);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-4 font-sans animate-fade-in">
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl transition-all duration-300 hover:border-indigo-500/30">
-        
-        {/* Topo / Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Área Administrativa</h2>
-          <p className="text-sm text-slate-400 mt-1">Evento: <span className="text-indigo-400 font-semibold uppercase">{currentEvent}</span></p>
+    <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 font-sans">
+      <div className="bg-slate-900/90 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl backdrop-blur-xl w-full max-w-md text-center">
+        <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-blue-500/30">
+          <Shield className="w-8 h-8 text-blue-400" />
         </div>
-
-        {/* Formulário */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-3 rounded-lg text-center">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Usuário</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </span>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-950/50 border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-white pl-10 pr-4 py-3 rounded-xl outline-none transition-all placeholder-slate-600 text-sm"
-                placeholder="Digite o nome do evento"
-                disabled={loading}
-                required
-              />
-            </div>
+        <h2 className="text-2xl font-black mb-1">Área Administrativa</h2>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">Evento: {currentEvent.toUpperCase()}</p>
+        
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400 text-xs font-bold">
+            {errorMessage}
           </div>
+        )}
 
+        <form onSubmit={handleLogin} className="space-y-4 text-left">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Senha</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950/50 border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-white pl-10 pr-4 py-3 rounded-xl outline-none transition-all placeholder-slate-600 text-sm"
-                placeholder="••••••••"
-                disabled={loading}
-                required
-              />
-            </div>
+            <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Senha do Painel</label>
+            <input
+              type="password"
+              placeholder="Digite a senha..."
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-950 border-2 border-slate-800 p-4 rounded-2xl focus:border-blue-500 outline-none font-bold text-white transition-all text-center tracking-widest text-lg"
+              required
+            />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98] disabled:from-slate-700 disabled:to-slate-800 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-150 text-sm mt-2 flex items-center justify-center"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 text-white font-black py-4 rounded-2xl transition shadow-lg text-base mt-2 flex items-center justify-center gap-2"
           >
-            {loading ? 'Autenticando...' : 'Entrar no Painel'}
+            {loading ? <RefreshCw className="animate-spin w-5 h-5" /> : <><Lock className="w-4 h-4" /> ENTRAR NO PAINEL</>}
           </button>
         </form>
       </div>
