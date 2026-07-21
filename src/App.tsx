@@ -632,7 +632,7 @@ export default function App() {
   }
 
   const LargeQrCodeScreen = () => (
-    <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative w-full h-full overflow-hidden bg-slate-950">
+    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative w-full h-full overflow-hidden bg-slate-950">
       {backgroundImageUrl && (
         <div className="absolute inset-0 w-full h-full z-0">
           <img 
@@ -645,28 +645,30 @@ export default function App() {
       )}
 
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }} 
+        initial={{ opacity: 0, scale: 0.95 }} 
         animate={{ opacity: 1, scale: 1 }} 
-        exit={{ opacity: 0, scale: 0.9 }}
+        exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col items-center gap-12 w-[92%] max-w-[720px] bg-slate-950/70 p-8 py-16 rounded-[4.5rem] border border-slate-800/80 backdrop-blur-lg shadow-[0_45px_150px_rgba(0,0,0,0.95)] relative z-10"
+        className="flex flex-col md:flex-row items-center justify-between gap-10 w-full max-w-[1300px] bg-slate-950/80 p-10 md:p-14 rounded-[3.5rem] border border-slate-800/80 backdrop-blur-xl shadow-[0_45px_150px_rgba(0,0,0,0.95)] relative z-10"
       >
-        <div className="w-full max-w-[540px]">
-          <LogoLumaScreen />
-        </div>
-        
-        <div className="space-y-4">
-          <h2 className="text-5xl font-black leading-tight tracking-tight text-white">Participe do Mural!</h2>
-          <p className="text-slate-300 text-2xl font-semibold">Sua foto e mensagem aparecem aqui ao vivo!</p>
+        <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-6 w-full md:w-3/5">
+          <div className="w-full max-w-[420px]">
+            <LogoLumaScreen />
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-4xl md:text-6xl font-black leading-tight tracking-tight text-white">Participe do Mural!</h2>
+            <p className="text-slate-300 text-xl md:text-2xl font-semibold">Sua foto e mensagem aparecem aqui ao vivo na tela!</p>
+          </div>
+          <p className="text-sm md:text-base text-blue-400 font-black uppercase tracking-widest animate-pulse pt-2">
+            Aponte a câmera do celular para participar
+          </p>
         </div>
 
-        <div className="bg-white p-8 rounded-[3.5rem] shadow-[0_35px_80px_rgba(255,255,255,0.08)]">
-          {totemUrl && <QRCodeSVG value={totemUrl} size={580} level="H" />}
+        <div className="w-full md:w-2/5 flex items-center justify-center">
+          <div className="bg-white p-6 md:p-8 rounded-[3rem] shadow-[0_35px_80px_rgba(255,255,255,0.08)]">
+            {totemUrl && <QRCodeSVG value={totemUrl} size={320} level="H" />}
+          </div>
         </div>
-
-        <p className="text-base text-blue-400 font-black uppercase tracking-widest animate-pulse mt-2">
-          Aponte a câmera do celular para participar
-        </p>
       </motion.div>
     </div>
   );
@@ -812,7 +814,6 @@ export default function App() {
                       transition={{ duration: 0.6 }}
                       className="bg-white p-10 rounded-3xl shadow-[0_60px_120px_rgba(0,0,0,0.95)] flex flex-col md:flex-row w-full border border-slate-200 max-h-full overflow-hidden gap-10 items-center"
                     >
-                      {/* FOTO HORIZONTAL GRANDE (Esquerda) */}
                       <div className="w-full md:w-2/3 h-[72vh] bg-[#0d0d0d] overflow-hidden rounded-2xl border border-slate-100 relative shadow-inner flex items-center justify-center">
                         {activeSlide.photo_url ? (
                           <img 
@@ -829,7 +830,6 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* TEXTO E NOME (Direita) */}
                       <div className="w-full md:w-1/3 flex flex-col justify-center text-left">
                         <p className="text-slate-800 text-3xl md:text-5xl font-semibold tracking-tight leading-normal italic">
                           "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
