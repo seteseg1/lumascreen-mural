@@ -57,6 +57,10 @@ export default function App() {
 
   const [isHardwareBlocked, setIsHardwareBlocked] = useState(false);
   const [hardwareBlockMessage, setHardwareBlockMessage] = useState('');
+
+  // 🔍 NOVOS ESTADOS PARA VALIDAÇÃO DE EVENTO/TOTEM NÃO CADASTRADO
+  const [isEventInvalid, setIsEventInvalid] = useState(false);
+  const [invalidEventMessage, setInvalidEventMessage] = useState('');
   
   const masterChannelRef = useRef<any>(null);
 
@@ -74,6 +78,25 @@ export default function App() {
 
       const url = `${window.location.origin}?view=mobile&event=${eventParam}${totemParam ? `&totem=${totemParam}` : ''}`;
       setTotemUrl(url);
+
+      // 🔍 VALIDAÇÃO SE O TOTEM/EVENTO EXISTE NO SUPABASE (APENAS NA VIEW MOBILE)
+      if (totemParam && params.get('view') === 'mobile') {
+        try {
+          const { data: totemData } = await supabase
+            .from('totens_management')
+            .select('*')
+            .ilike('totem_id', totemParam)
+            .single();
+
+          if (!totemData) {
+            setIsEventInvalid(true);
+            setInvalidEventMessage(`O identificador "${totemParam}" não está cadastrado no sistema.`);
+            return;
+          }
+        } catch (err) {
+          console.error("Erro ao validar totem:", err);
+        }
+      }
 
       // BUSCA CONFIGURAÇÃO DE TEMA (WHITE LABEL)
       try {
@@ -165,7 +188,7 @@ export default function App() {
 
   useEffect(() => {
     if (view !== 'totem' && view !== 'viewer' && view !== 'gallery') return;
-    if (isHardwareBlocked) return;
+    if (isHardwareBlocked || isEventInvalid) return;
 
     const fetchMessages = async () => {
       let query = supabase.from('guestbook_messages').select('*').eq('event_id', currentEvent);
@@ -249,10 +272,10 @@ export default function App() {
       supabase.removeChannel(channel); 
       clearInterval(pollingInterval);
     };
-  }, [view, currentEvent, isHardwareBlocked, isAdmin]);
+  }, [view, currentEvent, isHardwareBlocked, isEventInvalid, isAdmin]);
 
   useEffect(() => {
-    if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin || isHardwareBlocked) return;
+    if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin || isHardwareBlocked || isEventInvalid) return;
 
     let timeout: any;
 
@@ -277,7 +300,7 @@ export default function App() {
 
     handleRotation();
     return () => clearTimeout(timeout);
-  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex, isHardwareBlocked]);
+  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex, isHardwareBlocked, isEventInvalid]);
 
   const handleApproveMessage = async (id: string) => {
     try {
@@ -352,6 +375,7 @@ export default function App() {
     return <MasterAdmin />;
   }
 
+  // TELA DE BLOQUEIO DE HARDWARE (SUSPENSO)
   if (isHardwareBlocked) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
@@ -363,6 +387,24 @@ export default function App() {
           <p className="text-slate-300 text-lg font-bold leading-relaxed">{hardwareBlockMessage}</p>
           <div className="border-t border-slate-800 pt-4 mt-2">
             <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">KlimpTV Enterprise Services</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // 🔍 TELA DE BLOQUEIO PARA EVENTO/TOTEM NÃO CADASTRADO
+  if (isEventInvalid) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-xl bg-slate-900/50 p-10 rounded-[3rem] border border-amber-500/20 shadow-2xl backdrop-blur-md flex flex-col gap-6">
+          <div className="w-20 h-20 bg-amber-500/10 rounded-3xl flex items-center justify-center mx-auto border border-amber-500/30">
+            <ShieldAlert className="w-10 h-10 text-amber-500" />
+          </div>
+          <h2 className="text-3xl font-black text-amber-400 tracking-tight">EVENTO NÃO ENCONTRADO</h2>
+          <p className="text-slate-300 text-lg font-bold leading-relaxed">{invalidEventMessage}</p>
+          <div className="border-t border-slate-800 pt-4 mt-2">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">LumaScreen Enterprise Services</p>
           </div>
         </motion.div>
       </div>
