@@ -1,3 +1,4 @@
+import { PROHIBITED_WORDS } from './badWords';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, Trash2, Check, Smartphone, ShieldCheck, ShieldAlert } from 'lucide-react';
@@ -73,6 +74,26 @@ export default function App() {
 
       const url = `${window.location.origin}?view=mobile&event=${eventParam}${totemParam ? `&totem=${totemParam}` : ''}`;
       setTotemUrl(url);
+
+      // BUSCA CONFIGURAÇÃO DE TEMA (WHITE LABEL)
+      try {
+        const { data: themeData } = await supabase
+          .from('events_config')
+          .select('primary_color, card_radius')
+          .eq('event_id', eventParam)
+          .single();
+
+        if (themeData) {
+          if (themeData.primary_color) {
+            document.documentElement.style.setProperty('--primary-color', themeData.primary_color);
+          }
+          if (themeData.card_radius) {
+            document.documentElement.style.setProperty('--card-radius', themeData.card_radius);
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao aplicar tema dinâmico:", e);
+      }
 
       if (params.get('view') !== 'mobile' && params.get('view') !== 'gallery' && !params.get('master') && totemParam) {
         const { data } = await supabase
@@ -285,6 +306,19 @@ export default function App() {
   const handleMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return alert('Por favor, digite seu nome.');
+
+    // ==========================================
+    // 🛡️ VALIDAÇÃO DE PALAVRÕES USANDO badWords.ts
+    // ==========================================
+    const textToCheck = `${name} ${message}`.toLowerCase();
+    const hasProhibitedWord = PROHIBITED_WORDS.some(word => textToCheck.includes(word));
+
+    if (hasProhibitedWord) {
+      alert("⚠️ Ops! Sua mensagem ou nome contém termos não permitidos. Por favor, envie uma mensagem positiva!");
+      return; 
+    }
+    // ==========================================
+
     setLoading(true);
     try {
       let photoUrl = '';
@@ -473,7 +507,7 @@ export default function App() {
                 )}
               </div>
 
-              <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black py-5 rounded-[2rem] flex items-center justify-center gap-3 shadow-xl shadow-blue-100 transition-all text-xl mt-2">
+              <button type="submit" disabled={loading} className="w-full bg-theme-primary hover:opacity-90 disabled:bg-slate-300 rounded-theme text-white font-black py-5 flex items-center justify-center gap-3 shadow-xl transition-all text-xl mt-2">
                 {loading ? <RefreshCw className="animate-spin" /> : <><Send /> ENVIAR AGORA</>}
               </button>
             </form>

@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+:root {
+  /* Estes valores são os "padrões" caso nada seja carregado do banco */
+  --primary-color: #3b82f6; 
+  --card-radius: 16px;
+}
+
+/* Opcional: Se quiser que o Tailwind reconheça essas variáveis como classes padrão,
+   você pode adicioná-las assim: */
+@layer utilities {
+  .bg-theme-primary { background-color: var(--primary-color); }
+  .rounded-theme { border-radius: var(--card-radius); }
+}

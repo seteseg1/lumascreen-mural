@@ -1,198 +1,117 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
-import { CheckCircle2, XCircle, RefreshCw, Lock } from 'lucide-react';
-
-interface TotemConfig {
-  id: string;
-  totem_id: string;
-  status: boolean;
-  current_allowed_event: string;
-  blocked_message: string;
-}
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
+import { LayoutDashboard, Users, Camera, CheckCircle, Clock, FileDown, Palette, Save } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function MasterAdmin() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [totens, setTotens] = useState<TotemConfig[]>([]);
-  const [loading, setLoading] = useState(false);
-  
-  const [newTotemId, setNewTotemId] = useState('');
-  const [newEvent, setNewEvent] = useState('');
-
-  const MASTER_PASSWORD = 'klimptv2026'; 
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === MASTER_PASSWORD) {
-      setIsAuthenticated(true);
-      setError('');
-    } else {
-      setError('Senha Master incorreta.');
-    }
-  };
-
-  const fetchTotens = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('totens_management')
-      .select('*')
-      .order('totem_id', { ascending: true });
-
-    if (data) setTotens(data);
-    setLoading(false);
-  };
+  const [metrics, setMetrics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState({ primaryColor: '#3b82f6', borderRadius: '16px' });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchTotens();
+    const fetchData = async () => {
+      setLoading(true);
+      // Busca métricas
+      const { data: messages } = await supabase.from('guestbook_messages').select('created_at, approved, guest_name');
+      
+      // Busca configurações de tema (assumindo um evento padrão ou buscando do primeiro registro)
+      const { data: config } = await supabase.from('events_config').select('primary_color, card_radius').limit(1).single();
 
-      const channel = supabase
-        .channel('realtime_master')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'totens_management' }, () => {
-          fetchTotens();
-        })
-        .subscribe();
+      if (messages) {
+        const total = messages.length;
+        const approved = messages.filter(m => m.approved).length;
+        const dailyData = messages.reduce((acc: any, curr) => {
+          const date = new Date(curr.created_at).toLocaleDateString();
+          acc[date] = (acc[date] || 0) + 1;
+          return acc;
+        }, {});
+        const chartData = Object.keys(dailyData).map(date => ({ date, count: dailyData[date] }));
+        
+        setMetrics({ total, approved, pending: total - approved, chartData, raw: messages });
+      }
 
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [isAuthenticated]);
+      if (config) {
+        setTheme({ primaryColor: config.primary_color, borderRadius: config.card_radius });
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
-  const toggleStatus = async (id: string, currentStatus: boolean) => {
-    await supabase
-      .from('totens_management')
-      .update({ status: !currentStatus })
-      .eq('id', id);
+  const saveTheme = async () => {
+    setSaving(true);
+    await supabase.from('events_config').update({ primary_color: theme.primaryColor, card_radius: theme.borderRadius }).eq('event_id', 'geral');
+    alert("Tema atualizado com sucesso!");
+    setSaving(false);
   };
 
-  const updateAllowedEvent = async (id: string, eventName: string) => {
-    if (!eventName.trim()) return;
-    await supabase
-      .from('totens_management')
-      .update({ current_allowed_event: eventName.trim() })
-      .eq('id', id);
+  const handleDownloadPDF = () => {
+    try {
+      const doc = new jsPDF();
+      doc.setFontSize(22);
+      doc.text("Relatorio de Engajamento - LumaScreen", 14, 20);
+      const tableData = metrics.raw.map((m: any) => [new Date(m.created_at).toLocaleDateString(), m.guest_name, m.approved ? 'Aprovada' : 'Pendente']);
+      autoTable(doc, { head: [['Data', 'Convidado', 'Status']], body: tableData, startY: 30 });
+      doc.save("relatorio-engajamento.pdf");
+    } catch (e) { alert("Erro ao gerar PDF: " + e); }
   };
 
-  const registerNewTotem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTotemId.trim() || !newEvent.trim()) return alert('Preencha todos os campos.');
-    
-    const { error: insertError } = await supabase
-      .from('totens_management')
-      .insert([{ totem_id: newTotemId.trim(), current_allowed_event: newEvent.trim(), status: true }]);
-
-    if (insertError) {
-      alert('Erro ao cadastrar ou Totem ID já existente.');
-    } else {
-      setNewTotemId('');
-      setNewEvent('');
-    }
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans p-4">
-        <form onSubmit={handleLogin} className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-slate-800 backdrop-blur-md shadow-2xl max-w-md w-full flex flex-col gap-6 text-center">
-          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto border border-red-500/20">
-            <Lock className="w-8 h-8 text-red-400" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black">Painel Master KlimpTV</h2>
-            <p className="text-slate-400 text-sm mt-1">Chave Mestra de Segurança dos Totens</p>
-          </div>
-          {error && <p className="text-red-400 bg-red-500/10 py-2 rounded-xl text-sm font-bold border border-red-500/20">{error}</p>}
-          <input 
-            type="password" 
-            placeholder="Digite a Senha Mestra" 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl font-bold text-center tracking-widest outline-none focus:border-red-500 transition-all"
-          />
-          <button type="submit" className="w-full bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 font-black py-4 rounded-xl shadow-lg transition-all">
-            DESBLOQUEAR ACESSO
-          </button>
-        </form>
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Carregando...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white font-sans p-6">
-      <header className="max-w-6xl mx-auto flex items-center justify-between border-b border-slate-900 pb-6 mb-8">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-red-400 to-amber-400 bg-clip-text text-transparent">KLIMPTV MASTER CONTROL</h1>
-          <p className="text-slate-500 font-medium text-sm">Gerenciamento Remoto de Equipamentos Alocados</p>
-        </div>
-        <button onClick={fetchTotens} className="p-3 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 transition-all">
-          <RefreshCw className={`w-5 h-5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-8 font-sans">
+      <header className="mb-10 flex justify-between items-center">
+        <h1 className="text-4xl font-black text-white">MASTER DASHBOARD</h1>
+        <button onClick={handleDownloadPDF} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 py-4 rounded-2xl flex items-center gap-3">
+          <FileDown /> EXPORTAR PDF
         </button>
       </header>
 
-      <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="bg-slate-900/30 border border-slate-900 p-6 rounded-3xl h-fit">
-          <h3 className="text-lg font-black mb-4">Cadastrar Novo Totem Físico</h3>
-          <form onSubmit={registerNewTotem} className="flex flex-col gap-4">
-            <input 
-              type="text" 
-              placeholder="Ex: totem_02" 
-              value={newTotemId}
-              onChange={(e) => setNewTotemId(e.target.value)}
-              className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
-            />
-            <input 
-              type="text" 
-              placeholder="Evento inicial (Ex: maria)" 
-              value={newEvent}
-              onChange={(e) => setNewEvent(e.target.value)}
-              className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
-            />
-            <button type="submit" className="bg-blue-600 hover:bg-blue-700 py-3 rounded-xl font-black text-sm transition-all shadow-lg">
-              CADASTRAR EQUIPAMENTO
+      {/* Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl">
+            <p className="text-sm font-bold text-slate-400 uppercase">Total de Fotos</p>
+            <p className="text-5xl font-black">{metrics.total}</p>
+        </div>
+      </div>
+
+      {/* Configuração de Tema White Label */}
+      <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl mb-10">
+        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Palette className="text-pink-500" /> Customização White Label</h3>
+        <div className="flex gap-6 items-center">
+            <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2">COR PRIMÁRIA</label>
+                <input type="color" value={theme.primaryColor} onChange={(e) => setTheme({...theme, primaryColor: e.target.value})} className="w-16 h-16 rounded-xl cursor-pointer bg-transparent" />
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2">ARREDONDAMENTO (BORDAS)</label>
+                <select value={theme.borderRadius} onChange={(e) => setTheme({...theme, borderRadius: e.target.value})} className="bg-slate-800 p-4 rounded-xl font-bold">
+                    <option value="8px">Quadrado (8px)</option>
+                    <option value="16px">Médio (16px)</option>
+                    <option value="32px">Arredondado (32px)</option>
+                </select>
+            </div>
+            <button onClick={saveTheme} disabled={saving} className="bg-emerald-600 px-6 py-4 rounded-xl font-black flex items-center gap-2 hover:bg-emerald-700 ml-auto">
+                <Save /> {saving ? 'SALVANDO...' : 'SALVAR TEMA'}
             </button>
-          </form>
         </div>
-
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <h3 className="text-lg font-black">Máquinas sob Monitoramento</h3>
-          {totens.length === 0 ? (
-            <p className="text-slate-600 font-medium py-8">Nenhum totem cadastrado.</p>
-          ) : (
-            totens.map((t) => (
-              <div key={t.id} className="bg-slate-900/40 border border-slate-900 p-6 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-xl text-white">{t.totem_id.toUpperCase()}</span>
-                    {t.status ? (
-                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black px-2 py-0.5 rounded-full uppercase flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Online</span>
-                    ) : (
-                      <span className="bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-black px-2 py-0.5 rounded-full uppercase flex items-center gap-1"><XCircle className="w-3 h-3" /> Bloqueado</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <span className="font-bold text-slate-500">Evento Autorizado:</span>
-                    <input 
-                      type="text" 
-                      defaultValue={t.current_allowed_event}
-                      onBlur={(e) => updateAllowedEvent(t.id, e.target.value)}
-                      className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-lg text-xs font-black text-amber-400 outline-none focus:border-amber-500 w-32 text-center"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => toggleStatus(t.id, t.status)}
-                    className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all tracking-wider shadow-md ${t.status ? 'bg-red-600/20 text-red-400 border border-red-600/30 hover:bg-red-600 hover:text-white' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
-                  >
-                    {t.status ? 'BLOQUEAR TOTEM' : 'DESBLOQUEAR'}
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </main>
+      </div>
+      
+      {/* Gráfico */}
+      <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl h-80">
+         <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={metrics.chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis dataKey="date" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+              <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155' }} />
+              <Bar dataKey="count" fill={theme.primaryColor} radius={[10, 10, 0, 0]} />
+            </BarChart>
+         </ResponsiveContainer>
+      </div>
     </div>
   );
 }
