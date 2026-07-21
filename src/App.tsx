@@ -537,17 +537,49 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                <input type="file" accept="image/*" capture="user" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  ref={fileInputRef} 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                />
+                
                 {previewUrl ? (
                   <div className="relative rounded-3xl overflow-hidden h-56 group">
                     <img src={previewUrl} alt="Preview" className="w-full max-h-64 object-cover" />
                     <button type="button" onClick={() => {setPreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = '';}} className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-xl font-bold shadow-lg">Remover</button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full border-4 border-dashed border-slate-100 rounded-[2rem] py-10 bg-slate-50 hover:bg-slate-100 flex flex-col items-center gap-3 transition-all">
-                    <Camera className="w-12 h-12 text-slate-300" />
-                    <span className="font-black text-slate-400">TIRAR SELFIE</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.setAttribute('capture', 'user');
+                          fileInputRef.current.click();
+                        }
+                      }} 
+                      className="border-4 border-dashed border-slate-200 rounded-[2rem] py-8 bg-slate-50 hover:bg-slate-100 flex flex-col items-center gap-2 transition-all text-center p-2"
+                    >
+                      <Camera className="w-10 h-10 text-blue-500" />
+                      <span className="font-black text-slate-600 text-xs uppercase">Tirar Selfie</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.removeAttribute('capture');
+                          fileInputRef.current.click();
+                        }
+                      }} 
+                      className="border-4 border-dashed border-slate-200 rounded-[2rem] py-8 bg-slate-50 hover:bg-slate-100 flex flex-col items-center gap-2 transition-all text-center p-2"
+                    >
+                      <ImageIcon className="w-10 h-10 text-emerald-500" />
+                      <span className="font-black text-slate-600 text-xs uppercase">Escolher Galeria</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
