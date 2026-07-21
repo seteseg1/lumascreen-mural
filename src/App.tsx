@@ -616,21 +616,26 @@ export default function App() {
         animate={{ opacity: 1, scale: 1 }} 
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col items-center justify-center gap-6 w-full max-w-md bg-slate-950/90 p-8 rounded-[3rem] border border-slate-800 backdrop-blur-xl shadow-2xl relative z-10"
+        className="flex flex-col md:flex-row items-center justify-between gap-10 w-full max-w-[1300px] bg-slate-950/80 p-10 md:p-14 rounded-[3.5rem] border border-slate-800/80 backdrop-blur-xl shadow-[0_45px_150px_rgba(0,0,0,0.95)] relative z-10"
       >
-        <div className="w-full max-w-[260px]">
-          <LogoLumaScreen />
+        <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-6 w-full md:w-3/5">
+          <div className="w-full max-w-[420px]">
+            <LogoLumaScreen />
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-4xl md:text-6xl font-black leading-tight tracking-tight text-white">Participe do Mural!</h2>
+            <p className="text-slate-300 text-xl md:text-2xl font-semibold">Sua foto e mensagem aparecem aqui ao vivo na tela!</p>
+          </div>
+          <p className="text-sm md:text-base text-blue-400 font-black uppercase tracking-widest animate-pulse pt-2">
+            Aponte a câmera do celular para participar
+          </p>
         </div>
-        <div className="space-y-2">
-          <h2 className="text-3xl font-black text-white">Participe do Mural!</h2>
-          <p className="text-slate-300 text-sm font-semibold">Sua foto e mensagem aparecem aqui ao vivo na tela!</p>
+
+        <div className="w-full md:w-2/5 flex items-center justify-center">
+          <div className="bg-white p-6 md:p-8 rounded-[3rem] shadow-[0_35px_80px_rgba(255,255,255,0.08)]">
+            {totemUrl && <QRCodeSVG value={totemUrl} size={320} level="H" />}
+          </div>
         </div>
-        <div className="bg-white p-5 rounded-[2rem] shadow-xl">
-          {totemUrl && <QRCodeSVG value={totemUrl} size={220} level="H" />}
-        </div>
-        <p className="text-xs text-blue-400 font-black uppercase tracking-widest animate-pulse">
-          Aponte a câmera do celular para participar
-        </p>
       </motion.div>
     </div>
   );
@@ -643,13 +648,13 @@ export default function App() {
         <LargeQrCodeScreen />
       ) : (
         <>
-          <header className="bg-[#0f172a] border-b border-slate-800 p-4 flex items-center justify-between shadow-2xl relative z-20">
-            <div className="flex items-center gap-4">
-              <div className="w-36">
+          <header className="bg-[#0f172a] border-b border-slate-800 p-6 flex items-center justify-between shadow-2xl relative z-20">
+            <div className="flex items-center gap-6">
+              <div className="max-w-[280px]">
                 <LogoLumaScreen />
               </div>
               {isAdmin && (
-                <div className="border-l border-slate-800 pl-4 hidden sm:flex items-center gap-2">
+                <div className="border-l border-slate-800 pl-6 hidden lg:flex items-center gap-2">
                   <span className="inline-block bg-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">
                     Moderação: {currentEvent.toUpperCase()}
                   </span>
@@ -658,28 +663,55 @@ export default function App() {
                     onClick={() => {
                       const galleryUrl = `${window.location.origin}/?view=gallery&event=${currentEvent}`;
                       navigator.clipboard.writeText(galleryUrl);
-                      alert(`Link do Pack copiado!`);
+                      alert(`Link do Pack de Fotos copiado! Envie para o cliente: ${galleryUrl}`);
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-3 py-2 rounded-xl"
+                    className="ml-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
                   >
-                    🔗 LINK PACK
+                    🔗 COPIAR LINK DO PACK
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const validLeads = messages.filter(m => m.whatsapp && m.whatsapp.trim() !== '');
+                      if (validLeads.length === 0) {
+                        alert("Nenhum lead com WhatsApp cadastrado neste evento ainda.");
+                        return;
+                      }
+
+                      let csvContent = "data:text/csv;charset=utf-8,Nome,WhatsApp,Mensagem,Data\n";
+                      validLeads.forEach(lead => {
+                        const row = `"${lead.guest_name}","${lead.whatsapp}","${lead.message || ''}","${new Date(lead.created_at).toLocaleString()}"`;
+                        csvContent += row + "\n";
+                      });
+
+                      const encodedUri = encodeURI(csvContent);
+                      const link = document.createElement("a");
+                      link.setAttribute("href", encodedUri);
+                      link.setAttribute("download", `leads-whatsapp-${currentEvent}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    className="ml-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    📥 BAIXAR LEADS (CSV)
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-4 bg-black/50 p-3 rounded-2xl border border-slate-700">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs font-black text-white leading-none mb-1">PARTICIPE!</p>
-                <p className="text-slate-400 text-[10px]">Aponte a câmera</p>
+            <div className="flex items-center gap-8 bg-black/50 p-5 rounded-[2.5rem] border border-slate-700 backdrop-blur-md">
+              <div className="text-right">
+                <p className="text-3xl font-black text-white leading-none mb-1">PARTICIPE!</p>
+                <p className="text-slate-400 font-bold text-sm">Aponte a câmera do celular</p>
               </div>
-              <div className="bg-white p-2 rounded-xl">
-                {totemUrl && <QRCodeSVG value={totemUrl} size={70} level="H" />}
+              <div className="bg-white p-4 rounded-[1.8rem] shadow-[0_0_50px_rgba(255,255,255,0.15)]">
+                {totemUrl && <QRCodeSVG value={totemUrl} size={130} level="H" />}
               </div>
             </div>
           </header>
 
-          <main className="flex-1 p-4 bg-[radial-gradient(circle_at_50%_-20%,_#1e293b,_#050505)] flex items-center justify-center overflow-hidden">
+          <main className="flex-1 p-6 bg-[radial-gradient(circle_at_50%_-20%,_#1e293b,_#050505)] flex items-center justify-center overflow-hidden">
             {isAdmin ? (
               messages.length === 0 ? (
                 <div className="text-center py-20 space-y-4 relative z-20">
@@ -747,15 +779,15 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96 }}
                       transition={{ duration: 0.6 }}
-                      className="bg-white p-5 rounded-[2.5rem] shadow-2xl flex flex-col w-full border border-slate-200 gap-4 items-center text-center my-auto"
+                      className="bg-white p-6 rounded-[2.5rem] shadow-2xl flex flex-col w-full border border-slate-200 gap-4 items-center text-center my-auto"
                     >
-                      <div className="w-full aspect-[4/5] bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center">
+                      <div className="w-full h-[45vh] bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center">
                         {activeSlide.photo_url ? (
                           <img 
                             key={activeSlide.photo_url} 
                             src={activeSlide.photo_url} 
                             alt="Selfie" 
-                            className="w-full h-full object-cover" 
+                            className="w-full h-full object-contain" 
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
@@ -764,12 +796,12 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="w-full flex flex-col items-center justify-center pb-2">
-                        <p className="text-slate-800 text-xl font-semibold tracking-tight leading-snug italic line-clamp-2">
+                      <div className="w-full flex flex-col items-center justify-center pt-2">
+                        <p className="text-slate-800 text-2xl font-bold italic leading-snug">
                           "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                         </p>
-                        <div className="mt-3 border-t border-slate-100 pt-2 w-full">
-                          <span className="text-blue-600 font-black uppercase text-lg tracking-wider block truncate">{activeSlide.guest_name}</span>
+                        <div className="mt-4 border-t border-slate-200 pt-3 w-full">
+                          <span className="text-blue-600 font-black uppercase text-xl tracking-wider block">{activeSlide.guest_name}</span>
                         </div>
                       </div>
                     </motion.div>
