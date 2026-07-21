@@ -629,9 +629,9 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.5 }}
-                    className="bg-white p-8 rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col md:flex-row w-full border border-slate-200 gap-8 items-center"
+                    className="bg-white p-8 rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col lg:flex-row w-full border border-slate-200 gap-8 items-center"
                   >
-                    <div className="w-full md:w-3/5 h-[55vh] bg-slate-950 overflow-hidden relative rounded-2xl shadow-inner flex items-center justify-center">
+                    <div className="w-full lg:w-3/5 h-[55vh] bg-slate-950 overflow-hidden relative rounded-2xl shadow-inner flex items-center justify-center">
                       {activeSlide.photo_url ? (
                         <img key={activeSlide.photo_url} src={activeSlide.photo_url} alt="Selfie" className="w-full h-full object-contain" />
                       ) : (
@@ -641,8 +641,8 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="w-full md:w-2/5 flex flex-col justify-center text-left px-2">
-                      <p className="text-slate-800 text-3xl md:text-4xl font-bold italic leading-snug">
+                    <div className="w-full lg:w-2/5 flex flex-col justify-center text-left px-2">
+                      <p className="text-slate-800 text-2xl sm:text-3xl md:text-4xl font-bold italic leading-snug">
                         "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                       </p>
                       <div className="mt-8 border-t border-slate-100 pt-6">
@@ -849,9 +849,9 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96 }}
                       transition={{ duration: 0.6 }}
-                      className="bg-white p-10 rounded-3xl shadow-[0_60px_120px_rgba(0,0,0,0.95)] flex flex-col md:flex-row w-full border border-slate-200 max-h-full overflow-hidden gap-10 items-center"
+                      className="bg-white p-6 lg:p-10 rounded-3xl shadow-[0_60px_120px_rgba(0,0,0,0.95)] flex flex-col lg:flex-row w-full border border-slate-200 max-h-full overflow-hidden gap-6 lg:gap-10 items-center justify-center"
                     >
-                      <div className="w-full md:w-2/3 h-[72vh] bg-[#0d0d0d] overflow-hidden rounded-2xl border border-slate-100 relative shadow-inner flex items-center justify-center">
+                      <div className="w-full lg:w-3/5 h-[50vh] lg:h-[72vh] bg-[#0d0d0d] overflow-hidden rounded-2xl border border-slate-100 relative shadow-inner flex items-center justify-center">
                         {activeSlide.photo_url ? (
                           <img 
                             key={activeSlide.photo_url} 
@@ -867,12 +867,12 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="w-full md:w-1/3 flex flex-col justify-center text-left">
-                        <p className="text-slate-800 text-3xl md:text-5xl font-semibold tracking-tight leading-normal italic">
+                      <div className="w-full lg:w-2/5 flex flex-col justify-center text-left px-4">
+                        <p className="text-slate-900 text-2xl sm:text-3xl md:text-5xl font-semibold tracking-tight leading-normal italic">
                           "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                         </p>
-                        <div className="mt-8 border-t border-slate-200 pt-6">
-                          <span className="text-blue-600 font-black uppercase text-2xl tracking-widest block">{activeSlide.guest_name}</span>
+                        <div className="mt-6 lg:mt-8 border-t border-slate-200 pt-4 lg:pt-6">
+                          <span className="text-blue-600 font-black uppercase text-xl md:text-2xl tracking-widest block">{activeSlide.guest_name}</span>
                         </div>
                       </div>
                     </motion.div>
