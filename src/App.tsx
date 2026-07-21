@@ -620,7 +620,7 @@ export default function App() {
               <p className="text-slate-500 font-medium">Nenhuma foto aprovada ainda.</p>
             </div>
           ) : (
-            <div className="w-full max-w-5xl flex flex-col items-center relative">
+            <div className="w-full max-w-2xl flex flex-col items-center relative">
               <AnimatePresence mode="wait">
                 {activeSlide && (
                   <motion.div
@@ -629,9 +629,9 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.5 }}
-                    className="bg-white p-8 rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col lg:flex-row w-full border border-slate-200 gap-8 items-center"
+                    className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col w-full border border-slate-200 gap-6 items-center text-center"
                   >
-                    <div className="w-full lg:w-3/5 h-[55vh] bg-slate-950 overflow-hidden relative rounded-2xl shadow-inner flex items-center justify-center">
+                    <div className="w-full h-[50vh] sm:h-[55vh] bg-[#0d0d0d] overflow-hidden relative rounded-2xl shadow-inner flex items-center justify-center">
                       {activeSlide.photo_url ? (
                         <img key={activeSlide.photo_url} src={activeSlide.photo_url} alt="Selfie" className="w-full h-full object-contain" />
                       ) : (
@@ -641,12 +641,12 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="w-full lg:w-2/5 flex flex-col justify-center text-left px-2">
-                      <p className="text-slate-800 text-2xl sm:text-3xl md:text-4xl font-bold italic leading-snug">
+                    <div className="w-full flex flex-col items-center justify-center px-2">
+                      <p className="text-slate-800 text-2xl sm:text-3xl font-bold italic leading-snug">
                         "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                       </p>
-                      <div className="mt-8 border-t border-slate-100 pt-6">
-                        <span className="text-blue-600 font-black uppercase text-xl tracking-wider block">{activeSlide.guest_name}</span>
+                      <div className="mt-6 border-t border-slate-200 pt-4 w-full">
+                        <span className="text-blue-600 font-black uppercase text-xl sm:text-2xl tracking-wider block">{activeSlide.guest_name}</span>
                       </div>
                     </div>
                   </motion.div>
@@ -840,7 +840,7 @@ export default function App() {
                 </div>
               )
             ) : (
-              <div className="relative w-full max-w-[1400px] h-[85vh] flex flex-col items-center justify-center p-2">
+              <div className="relative w-full max-w-xl h-[88vh] flex flex-col items-center justify-center p-2">
                 <AnimatePresence mode="wait">
                   {activeSlide && (
                     <motion.div
@@ -849,9 +849,9 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96 }}
                       transition={{ duration: 0.6 }}
-                      className="bg-white p-6 lg:p-10 rounded-3xl shadow-[0_60px_120px_rgba(0,0,0,0.95)] flex flex-col lg:flex-row w-full border border-slate-200 max-h-full overflow-hidden gap-6 lg:gap-10 items-center justify-center"
+                      className="bg-white p-6 sm:p-8 rounded-[3rem] shadow-[0_60px_120px_rgba(0,0,0,0.95)] flex flex-col w-full border border-slate-200 max-h-full overflow-hidden gap-6 items-center text-center"
                     >
-                      <div className="w-full lg:w-3/5 h-[50vh] lg:h-[72vh] bg-[#0d0d0d] overflow-hidden rounded-2xl border border-slate-100 relative shadow-inner flex items-center justify-center">
+                      <div className="w-full h-[52vh] bg-[#0d0d0d] overflow-hidden rounded-2xl border border-slate-100 relative shadow-inner flex items-center justify-center">
                         {activeSlide.photo_url ? (
                           <img 
                             key={activeSlide.photo_url} 
@@ -867,12 +867,12 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="w-full lg:w-2/5 flex flex-col justify-center text-left px-4">
-                        <p className="text-slate-900 text-2xl sm:text-3xl md:text-5xl font-semibold tracking-tight leading-normal italic">
+                      <div className="w-full flex flex-col items-center justify-center">
+                        <p className="text-slate-800 text-2xl sm:text-4xl font-semibold tracking-tight leading-snug italic">
                           "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                         </p>
-                        <div className="mt-6 lg:mt-8 border-t border-slate-200 pt-4 lg:pt-6">
-                          <span className="text-blue-600 font-black uppercase text-xl md:text-2xl tracking-widest block">{activeSlide.guest_name}</span>
+                        <div className="mt-6 border-t border-slate-200 pt-4 w-full">
+                          <span className="text-blue-600 font-black uppercase text-xl sm:text-2xl tracking-widest block">{activeSlide.guest_name}</span>
                         </div>
                       </div>
                     </motion.div>
