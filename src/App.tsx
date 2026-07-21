@@ -70,17 +70,20 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const eventParam = params.get('event') || 'geral';
       const totemParam = params.get('totem');
+      const viewParam = params.get('view');
       setCurrentEvent(eventParam);
       
       if (params.get('admin') === 'true') setIsAdmin(true);
       if (params.get('master') === 'true') setIsMaster(true);
-      if (params.get('view') === 'mobile') setView('mobile');
-      if (params.get('view') === 'gallery') setView('gallery');
+      if (viewParam === 'mobile') setView('mobile');
+      else if (viewParam === 'totem') setView('totem');
+      else if (viewParam === 'gallery') setView('gallery');
+      else setView('viewer');
 
       const url = `${window.location.origin}?view=mobile&event=${eventParam}${totemParam ? `&totem=${totemParam}` : ''}`;
       setTotemUrl(url);
 
-      if (totemParam && params.get('view') === 'mobile') {
+      if (totemParam && viewParam === 'mobile') {
         try {
           const { data: totemData } = await supabase
             .from('totens_management')
@@ -117,7 +120,7 @@ export default function App() {
         console.error("Erro ao aplicar tema dinâmico:", e);
       }
 
-      if (params.get('view') !== 'mobile' && params.get('view') !== 'gallery' && !params.get('master') && totemParam) {
+      if (viewParam !== 'mobile' && viewParam !== 'gallery' && !params.get('master') && totemParam) {
         const { data } = await supabase
           .from('totens_management')
           .select('*');
@@ -186,8 +189,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'totem' && view !== 'viewer' && view !== 'gallery') return;
-    if (isHardwareBlocked || isEventInvalid) return;
+    if (!currentEvent) return;
 
     const fetchMessages = async () => {
       let query = supabase.from('guestbook_messages').select('*').eq('event_id', currentEvent);
@@ -219,7 +221,7 @@ export default function App() {
 
     const channel = supabase
       .channel(`realtime_totem_messages_${currentEvent}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guestbook_messages' }, 
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guestbook_messages', filter: `event_id=eq.${currentEvent}` }, 
         (payload) => {
           const newMessage = payload.new as Message;
           const isUrlAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
@@ -235,7 +237,7 @@ export default function App() {
           }
         }
       )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'guestbook_messages' },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'guestbook_messages', filter: `event_id=eq.${currentEvent}` },
         (payload) => {
           const updatedMessage = payload.new as Message;
           if (updatedMessage.event_id !== currentEvent) return;
@@ -260,7 +262,7 @@ export default function App() {
           }
         }
       )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'guestbook_messages' },
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'guestbook_messages', filter: `event_id=eq.${currentEvent}` },
         (payload) => {
           setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
         }
