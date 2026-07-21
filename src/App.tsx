@@ -329,8 +329,11 @@ export default function App() {
     e.preventDefault();
     if (!name.trim()) return alert('Por favor, digite seu nome.');
 
-    const textToCheck = `${name} ${message} ${whatsapp}`.toLowerCase();
-    const hasProhibitedWord = PROHIBITED_WORDS.some(word => textToCheck.includes(word));
+    const fullText = `${name} ${message} ${whatsapp}`.toLowerCase();
+    const wordsInInput = fullText.split(/\s+/);
+    const hasProhibitedWord = PROHIBITED_WORDS.some(prohibited => 
+      wordsInInput.includes(prohibited.toLowerCase())
+    );
 
     if (hasProhibitedWord) {
       alert("⚠️ Ops! Sua mensagem ou nome contém termos não permitidos. Por favor, envie uma mensagem positiva!");
