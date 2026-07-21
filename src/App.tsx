@@ -28,6 +28,7 @@ interface Message {
   id: string;
   guest_name: string;
   message: string;
+  whatsapp?: string;
   photo_url: string;
   created_at: string;
   approved: boolean;
@@ -41,6 +42,7 @@ export default function App() {
   const [isUrlAdminAuthenticated, setIsUrlAdminAuthenticated] = useState(false); 
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -333,7 +335,7 @@ export default function App() {
     // ==========================================
     // 🛡️ VALIDAÇÃO DE PALAVRÕES USANDO badWords.ts
     // ==========================================
-    const textToCheck = `${name} ${message}`.toLowerCase();
+    const textToCheck = `${name} ${message} ${whatsapp}`.toLowerCase();
     const hasProhibitedWord = PROHIBITED_WORDS.some(word => textToCheck.includes(word));
 
     if (hasProhibitedWord) {
@@ -356,12 +358,19 @@ export default function App() {
       }
       
       const { error: dbError } = await supabase.from('guestbook_messages').insert([
-        { guest_name: name, message: message, photo_url: photoUrl, approved: false, event_id: currentEvent }
+        { 
+          guest_name: name, 
+          message: message, 
+          whatsapp: whatsapp, 
+          photo_url: photoUrl, 
+          approved: false, 
+          event_id: currentEvent 
+        }
       ]);
       
       if (dbError) throw dbError;
       setSuccess(true);
-      setName(''); setMessage(''); setPreviewUrl(null);
+      setName(''); setMessage(''); setWhatsapp(''); setPreviewUrl(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) { alert(`Erro: ${err.message}`); } finally { setLoading(false); }
   };
@@ -532,6 +541,11 @@ export default function App() {
                   <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Recado especial</label>
                   <textarea placeholder="Sua mensagem..." rows={3} value={message} onChange={(e) => setMessage(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl focus:border-emerald-400 outline-none font-bold transition-all resize-none" />
                 </div>
+
+                <div>
+                  <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">WhatsApp (Opcional)</label>
+                  <input type="tel" placeholder="(00) 90000-0000" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl focus:border-emerald-400 outline-none font-bold transition-all" />
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -684,7 +698,7 @@ export default function App() {
                 <LogoLumaScreen />
               </div>
               {isAdmin && (
-                <div className="border-l border-slate-800 pl-6 hidden lg:block flex items-center gap-2">
+                <div className="border-l border-slate-800 pl-6 hidden lg:flex items-center gap-2">
                   <span className="inline-block bg-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">
                     Moderação: {currentEvent.toUpperCase()}
                   </span>
@@ -695,9 +709,36 @@ export default function App() {
                       navigator.clipboard.writeText(galleryUrl);
                       alert(`Link do Pack de Fotos copiado! Envie para o cliente: ${galleryUrl}`);
                     }}
-                    className="ml-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+                    className="ml-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
                   >
                     🔗 COPIAR LINK DO PACK
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const validLeads = messages.filter(m => m.whatsapp && m.whatsapp.trim() !== '');
+                      if (validLeads.length === 0) {
+                        alert("Nenhum lead com WhatsApp cadastrado neste evento ainda.");
+                        return;
+                      }
+
+                      let csvContent = "data:text/csv;charset=utf-8,Nome,WhatsApp,Mensagem,Data\n";
+                      validLeads.forEach(lead => {
+                        const row = `"${lead.guest_name}","${lead.whatsapp}","${lead.message || ''}","${new Date(lead.created_at).toLocaleString()}"`;
+                        csvContent += row + "\n";
+                      });
+
+                      const encodedUri = encodeURI(csvContent);
+                      const link = document.createElement("a");
+                      link.setAttribute("href", encodedUri);
+                      link.setAttribute("download", `leads-whatsapp-${currentEvent}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    className="ml-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    📥 BAIXAR LEADS (CSV)
                   </button>
                 </div>
               )}
@@ -764,6 +805,7 @@ export default function App() {
                           </p>
                           <div className="mt-6 flex flex-col border-t border-slate-100 pt-4">
                             <span className="text-blue-600 font-black uppercase text-sm tracking-widest">{msg.guest_name}</span>
+                            {msg.whatsapp && <span className="text-xs text-slate-400 font-bold mt-1">Wpp: {msg.whatsapp}</span>}
                           </div>
                         </div>
                       </motion.div>
