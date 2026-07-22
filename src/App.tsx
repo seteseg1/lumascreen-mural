@@ -781,13 +781,13 @@ export default function App() {
                       transition={{ duration: 0.6 }}
                       className="bg-white p-6 rounded-[2.5rem] shadow-2xl flex flex-col w-full h-full border border-slate-200 justify-between items-center text-center"
                     >
-                      <div className="w-full flex-1 bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center my-2">
+                      <div className="w-full flex-1 bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center my-1">
                         {activeSlide.photo_url ? (
                           <img 
                             key={activeSlide.photo_url} 
                             src={activeSlide.photo_url} 
                             alt="Selfie" 
-                            className="w-full h-full object-contain" 
+                            className="w-full h-full object-cover" 
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
