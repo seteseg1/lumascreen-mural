@@ -770,7 +770,7 @@ export default function App() {
                 </div>
               )
             ) : view === 'totem' ? (
-              <div className="relative w-full max-w-sm h-full flex flex-col items-center justify-center">
+              <div className="relative w-full h-full flex flex-col items-center justify-center p-2">
                 <AnimatePresence mode="wait">
                   {activeSlide && (
                     <motion.div
@@ -779,9 +779,9 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96 }}
                       transition={{ duration: 0.6 }}
-                      className="bg-white p-6 rounded-[2.5rem] shadow-2xl flex flex-col w-full border border-slate-200 gap-4 items-center text-center my-auto"
+                      className="bg-white p-6 rounded-[2.5rem] shadow-2xl flex flex-col w-full h-full border border-slate-200 justify-between items-center text-center"
                     >
-                      <div className="w-full h-[45vh] bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center">
+                      <div className="w-full flex-1 bg-slate-900 overflow-hidden rounded-2xl relative shadow-inner flex items-center justify-center my-2">
                         {activeSlide.photo_url ? (
                           <img 
                             key={activeSlide.photo_url} 
@@ -791,17 +791,17 @@ export default function App() {
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
-                            <ImageIcon className="w-20 h-20" />
+                            <ImageIcon className="w-24 h-24" />
                           </div>
                         )}
                       </div>
 
-                      <div className="w-full flex flex-col items-center justify-center pt-2">
-                        <p className="text-slate-800 text-2xl font-bold italic leading-snug">
+                      <div className="w-full flex flex-col items-center justify-center pt-2 pb-1">
+                        <p className="text-slate-800 text-2xl sm:text-3xl font-semibold tracking-tight leading-snug italic">
                           "{activeSlide.message || 'Curtindo muito a festa! 🎉'}"
                         </p>
-                        <div className="mt-4 border-t border-slate-200 pt-3 w-full">
-                          <span className="text-blue-600 font-black uppercase text-xl tracking-wider block">{activeSlide.guest_name}</span>
+                        <div className="mt-3 border-t border-slate-200 pt-3 w-full">
+                          <span className="text-blue-600 font-black uppercase text-2xl tracking-wider block">{activeSlide.guest_name}</span>
                         </div>
                       </div>
                     </motion.div>
