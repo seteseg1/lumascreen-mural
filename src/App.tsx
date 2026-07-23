@@ -35,14 +35,214 @@ interface Message {
   event_id: string;
 }
 
+// ==========================================
+// COMPONENTE DA TELA DE TESTE ISOLADO
+// ==========================================
+function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { testSlug: string; clientTestName: string; loadingTest: boolean; testExists: boolean }) {
+  const [testMessages, setTestMessages] = useState<Message[]>([]);
+  const [isTestAdmin, setIsTestAdmin] = useState(false);
+  const [testName, setTestName] = useState('');
+  const [testMsg, setTestMsg] = useState('');
+  const [testWhatsapp, setTestWhatsapp] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testSuccess, setTestSuccess] = useState(false);
+  const testFileInputRef = useRef<HTMLInputElement>(null);
+  const [testPreviewUrl, setTestPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!testSlug) return;
+    const fetchTestMessages = async () => {
+      let query = supabase.from('guestbook_messages').select('*').eq('event_id', `test_${testSlug}`);
+      if (!isTestAdmin) query = query.eq('approved', true);
+      const { data } = await query.order('created_at', { ascending: false });
+      if (data) setTestMessages(data as Message[]);
+    };
+    fetchTestMessages();
+    const interval = setInterval(fetchTestMessages, 4000);
+    return () => clearInterval(interval);
+  }, [testSlug, isTestAdmin]);
+
+  if (loadingTest) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans">
+        <p className="text-xl animate-pulse text-blue-400">Carregando ambiente de teste exclusivo...</p>
+      </div>
+    );
+  }
+
+  if (!testExists) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="max-w-md bg-slate-900 p-8 rounded-3xl border border-red-500/20 shadow-2xl">
+          <h2 className="text-2xl font-black text-red-400 mb-2">Link Inválido ou Expirado</h2>
+          <p className="text-slate-400">Este link de teste não está ativo ou não foi encontrado no sistema.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const mobileTestUrl = `${window.location.origin}/test/${testSlug}?mobile=true`;
+  const isMobileView = new URLSearchParams(window.location.search).get('mobile') === 'true';
+
+  const handleTestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testName.trim()) return alert('Digite seu nome.');
+    setTestLoading(true);
+    try {
+      let photoUrl = '';
+      const file = testFileInputRef.current?.files?.[0];
+      if (file) {
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `test-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('guestbook-photos').upload(fileName, file);
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('guestbook-photos').getPublicUrl(fileName);
+        photoUrl = data.publicUrl;
+      }
+      const { error } = await supabase.from('guestbook_messages').insert([{
+        guest_name: testName,
+        message: testMsg,
+        whatsapp: testWhatsapp,
+        photo_url: photoUrl,
+        approved: false,
+        event_id: `test_${testSlug}`
+      }]);
+      if (error) throw error;
+      setTestSuccess(true);
+      setTestName(''); setTestMsg(''); setTestWhatsapp(''); setTestPreviewUrl(null);
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  if (isMobileView) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans">
+        <div className="w-full max-w-md flex-1 py-8">
+          {testSuccess ? (
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border border-slate-100 mt-12">
+              <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4 animate-bounce" />
+              <h2 className="text-3xl font-black mb-2">Enviado para o Teste!</h2>
+              <p className="text-slate-500 mb-6 font-medium">Sua foto foi enviada para a demonstração de {clientTestName}.</p>
+              <button onClick={() => setTestSuccess(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">ENVIAR OUTRA</button>
+            </div>
+          ) : (
+            <form onSubmit={handleTestSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-black text-slate-900">Teste LumaScreen</h2>
+                <p className="text-blue-600 font-bold text-xs uppercase mt-1">Parceiro: {clientTestName}</p>
+              </div>
+              <input type="text" placeholder="Seu Nome" value={testName} onChange={(e) => setTestName(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" required />
+              <textarea placeholder="Sua Mensagem" rows={2} value={testMsg} onChange={(e) => setTestMsg(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold resize-none" />
+              <input type="file" accept="image/*" ref={testFileInputRef} onChange={() => {
+                const f = testFileInputRef.current?.files?.[0];
+                if(f) { const r = new FileReader(); r.onloadend = () => setTestPreviewUrl(r.result as string); r.readAsDataURL(f); }
+              }} className="hidden" />
+              {testPreviewUrl ? (
+                <div className="relative rounded-2xl overflow-hidden h-40">
+                  <img src={testPreviewUrl} className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => setTestPreviewUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg text-xs">Remover</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => testFileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 py-6 rounded-2xl font-black text-slate-600 text-xs uppercase flex items-center justify-center gap-2">
+                  <Camera className="w-6 h-6 text-blue-500" /> Tirar Foto / Enviar
+                </button>
+              )}
+              <button type="submit" disabled={testLoading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">
+                {testLoading ? <RefreshCw className="animate-spin mx-auto" /> : 'ENVIAR PARA O TELÃO DE TESTE'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
+      <header className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center px-6">
+        <div className="flex items-center gap-4">
+          <div className="max-w-[150px]"><LogoLumaScreen /></div>
+          <span className="bg-blue-500/10 border border-blue-500/30 text-blue-400 px-3 py-1 rounded-xl text-xs font-black uppercase">
+            Demonstração: {clientTestName}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setIsTestAdmin(!isTestAdmin)} className={`px-4 py-2 rounded-xl text-xs font-black transition ${isTestAdmin ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
+            {isTestAdmin ? '👁️ Ver Telão (LED)' : '🛡️ Painel de Moderação'}
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 p-6 flex flex-col md:flex-row gap-6 items-center justify-center max-w-7xl mx-auto w-full">
+        <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl flex flex-col items-center text-center max-w-sm w-full">
+          <h3 className="text-xl font-black mb-2 text-white">Escaneie para Enviar</h3>
+          <p className="text-slate-400 text-xs mb-6">Aponte a câmera do celular para simular um convidado enviando foto para este LED.</p>
+          <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
+            <QRCodeSVG value={mobileTestUrl} size={180} level="H" />
+          </div>
+          <a href={mobileTestUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline font-bold">
+            Abrir link de envio em aba anônima ↗
+          </a>
+        </div>
+
+        <div className="flex-1 bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-800 h-[650px] flex flex-col overflow-hidden w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-sm font-black uppercase tracking-wider text-slate-400">
+              {isTestAdmin ? 'Moderação de Teste (Aprove para exibir no LED)' : 'Visualização do Telão de LED (Tempo Real)'}
+            </h4>
+            <span className="text-xs bg-slate-800 px-3 py-1 rounded-full text-slate-300 font-bold">{testMessages.length} fotos</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4 p-2">
+            {testMessages.length === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                <RefreshCw className="w-10 h-10 animate-spin mb-3 text-slate-600" />
+                <p className="text-sm font-medium">Nenhuma foto enviada ainda. Use o QR Code ao lado para testar!</p>
+              </div>
+            ) : (
+              testMessages.map((msg) => (
+                <div key={msg.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col relative shadow-xl">
+                  {isTestAdmin && (
+                    <div className="absolute top-2 right-2 flex gap-1 z-10">
+                      {!msg.approved && (
+                        <button onClick={async () => { await supabase.from('guestbook_messages').update({ approved: true }).eq('id', msg.id); }} className="bg-emerald-600 text-white p-2 rounded-xl text-xs font-bold shadow">
+                          Aprovar
+                        </button>
+                      )}
+                      <button onClick={async () => { await supabase.from('guestbook_messages').delete().eq('id', msg.id); }} className="bg-red-600 text-white p-2 rounded-xl text-xs font-bold shadow">
+                        Excluir
+                      </button>
+                    </div>
+                  )}
+                  <div className="aspect-video w-full bg-black">
+                    {msg.photo_url && <img src={msg.photo_url} className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="p-3 flex flex-col justify-between flex-1">
+                    <p className="text-sm italic text-slate-200">"{msg.message || 'Curtindo o evento!'}"</p>
+                    <span className="text-xs font-black text-blue-400 mt-2 uppercase">{msg.guest_name}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENTE PRINCIPAL APP
+// ==========================================
 export default function App() {
-  // Estados para rotas de Teste Isolado (/test/:slug)
   const [testSlug, setTestSlug] = useState<string | null>(null);
   const [clientTestName, setClientTestName] = useState<string>('');
   const [loadingTest, setLoadingTest] = useState(true);
   const [testExists, setTestExists] = useState(false);
 
-  // Estados originais do sistema
   const [view, setView] = useState<'totem' | 'mobile' | 'viewer' | 'gallery'>('totem');
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false); 
@@ -72,7 +272,6 @@ export default function App() {
   
   const masterChannelRef = useRef<any>(null);
 
-  // Detecta rota de teste ao carregar
   useEffect(() => {
     const pathMatch = window.location.pathname.match(/^\/test\/(.+)$/);
     if (pathMatch) {
@@ -108,7 +307,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Se estivermos em rota de teste, não executa a config padrão de eventos
     if (testSlug) return;
 
     const fetchEventConfig = async () => {
@@ -423,206 +621,9 @@ export default function App() {
     setView('viewer');
   };
 
-  // ==========================================
-  // RENDERIZAÇÃO DA ROTA DE TESTE ISOLADO (/test/:slug)
-  // ==========================================
+  // Se estiver em rota de teste, renderiza o componente dedicado
   if (testSlug) {
-    const [testMessages, setTestMessages] = useState<Message[]>([]);
-    const [isTestAdmin, setIsTestAdmin] = useState(false);
-    const [testName, setTestName] = useState('');
-    const [testMsg, setTestMsg] = useState('');
-    const [testWhatsapp, setTestWhatsapp] = useState('');
-    const [testLoading, setTestLoading] = useState(false);
-    const [testSuccess, setTestSuccess] = useState(false);
-    const testFileInputRef = useRef<HTMLInputElement>(null);
-    const [testPreviewUrl, setTestPreviewUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-      if (!testSlug) return;
-      const fetchTestMessages = async () => {
-        let query = supabase.from('guestbook_messages').select('*').eq('event_id', `test_${testSlug}`);
-        if (!isTestAdmin) query = query.eq('approved', true);
-        const { data } = await query.order('created_at', { ascending: false });
-        if (data) setTestMessages(data as Message[]);
-      };
-      fetchTestMessages();
-      const interval = setInterval(fetchTestMessages, 4000);
-      return () => clearInterval(interval);
-    }, [testSlug, isTestAdmin]);
-
-    if (loadingTest) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans">
-          <p className="text-xl animate-pulse text-blue-400">Carregando ambiente de teste exclusivo...</p>
-        </div>
-      );
-    }
-
-    if (!testExists) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
-          <div className="max-w-md bg-slate-900 p-8 rounded-3xl border border-red-500/20 shadow-2xl">
-            <h2 className="text-2xl font-black text-red-400 mb-2">Link Inválido ou Expirado</h2>
-            <p className="text-slate-400">Este link de teste não está ativo ou não foi encontrado no sistema.</p>
-          </div>
-        </div>
-      );
-    }
-
-    const mobileTestUrl = `${window.location.origin}/test/${testSlug}?mobile=true`;
-
-    const handleTestSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!testName.trim()) return alert('Digite seu nome.');
-      setTestLoading(true);
-      try {
-        let photoUrl = '';
-        const file = testFileInputRef.current?.files?.[0];
-        if (file) {
-          const fileExt = file.name.split('.').pop() || 'jpg';
-          const fileName = `test-${Date.now()}.${fileExt}`;
-          const { error: uploadError } = await supabase.storage.from('guestbook-photos').upload(fileName, file);
-          if (uploadError) throw uploadError;
-          const { data } = supabase.storage.from('guestbook-photos').getPublicUrl(fileName);
-          photoUrl = data.publicUrl;
-        }
-        const { error } = await supabase.from('guestbook_messages').insert([{
-          guest_name: testName,
-          message: testMsg,
-          whatsapp: testWhatsapp,
-          photo_url: photoUrl,
-          approved: false,
-          event_id: `test_${testSlug}`
-        }]);
-        if (error) throw error;
-        setTestSuccess(true);
-        setTestName(''); setTestMsg(''); setTestWhatsapp(''); setTestPreviewUrl(null);
-      } catch (err: any) {
-        alert(`Erro: ${err.message}`);
-      } finally {
-        setTestLoading(false);
-      }
-    };
-
-    const isMobileView = new URLSearchParams(window.location.search).get('mobile') === 'true';
-
-    if (isMobileView) {
-      return (
-        <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans">
-          <div className="w-full max-w-md flex-1 py-8">
-            {testSuccess ? (
-              <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border border-slate-100 mt-12">
-                <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4 animate-bounce" />
-                <h2 className="text-3xl font-black mb-2">Enviado para o Teste!</h2>
-                <p className="text-slate-500 mb-6 font-medium">Sua foto foi enviada para a demonstração de {clientTestName}.</p>
-                <button onClick={() => setTestSuccess(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">ENVIAR OUTRA</button>
-              </div>
-            ) : (
-              <form onSubmit={handleTestSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-black text-slate-900">Teste LumaScreen</h2>
-                  <p className="text-blue-600 font-bold text-xs uppercase mt-1">Parceiro: {clientTestName}</p>
-                </div>
-                <input type="text" placeholder="Seu Nome" value={testName} onChange={(e) => setTestName(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" required />
-                <textarea placeholder="Sua Mensagem" rows={2} value={testMsg} onChange={(e) => setTestMsg(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold resize-none" />
-                <input type="file" accept="image/*" ref={testFileInputRef} onChange={() => {
-                  const f = testFileInputRef.current?.files?.[0];
-                  if(f) { const r = new FileReader(); r.onloadend = () => setTestPreviewUrl(r.result as string); r.readAsDataURL(f); }
-                }} className="hidden" />
-                {testPreviewUrl ? (
-                  <div className="relative rounded-2xl overflow-hidden h-40">
-                    <img src={testPreviewUrl} className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => setTestPreviewUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg text-xs">Remover</button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => testFileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 py-6 rounded-2xl font-black text-slate-600 text-xs uppercase flex items-center justify-center gap-2">
-                    <Camera className="w-6 h-6 text-blue-500" /> Tirar Foto / Enviar
-                  </button>
-                )}
-                <button type="submit" disabled={testLoading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">
-                  {testLoading ? <RefreshCw className="animate-spin mx-auto" /> : 'ENVIAR PARA O TELÃO DE TESTE'}
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
-        <header className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center px-6">
-          <div className="flex items-center gap-4">
-            <div className="max-w-[150px]"><LogoLumaScreen /></div>
-            <span className="bg-blue-500/10 border border-blue-500/30 text-blue-400 px-3 py-1 rounded-xl text-xs font-black uppercase">
-              Demonstração: {clientTestName}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsTestAdmin(!isTestAdmin)} className={`px-4 py-2 rounded-xl text-xs font-black transition ${isTestAdmin ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
-              {isTestAdmin ? '👁️ Ver Telão (LED)' : '🛡️ Painel de Moderação'}
-            </button>
-          </div>
-        </header>
-
-        <main className="flex-1 p-6 flex flex-col md:flex-row gap-6 items-center justify-center max-w-7xl mx-auto w-full">
-          {/* Lado esquerdo: QR Code para o lojista testar apontando o celular */}
-          <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl flex flex-col items-center text-center max-w-sm w-full">
-            <h3 className="text-xl font-black mb-2 text-white">Escaneie para Enviar</h3>
-            <p className="text-slate-400 text-xs mb-6">Aponte a câmera do celular para simular um convidado enviando foto para este LED.</p>
-            <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
-              <QRCodeSVG value={mobileTestUrl} size={180} level="H" />
-            </div>
-            <a href={mobileTestUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline font-bold">
-              Abrir link de envio em aba anônima ↗
-            </a>
-          </div>
-
-          {/* Lado direito: Telão (LED) ou Moderação */}
-          <div className="flex-1 bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-800 h-[650px] flex flex-col overflow-hidden w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="text-sm font-black uppercase tracking-wider text-slate-400">
-                {isTestAdmin ? 'Moderação de Teste (Aprove para exibir no LED)' : 'Visualização do Telão de LED (Tempo Real)'}
-              </h4>
-              <span className="text-xs bg-slate-800 px-3 py-1 rounded-full text-slate-300 font-bold">{testMessages.length} fotos</span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4 p-2">
-              {testMessages.length === 0 ? (
-                <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
-                  <RefreshCw className="w-10 h-10 animate-spin mb-3 text-slate-600" />
-                  <p className="text-sm font-medium">Nenhuma foto enviada ainda. Use o QR Code ao lado para testar!</p>
-                </div>
-              ) : (
-                testMessages.map((msg) => (
-                  <div key={msg.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col relative shadow-xl">
-                    {isTestAdmin && (
-                      <div className="absolute top-2 right-2 flex gap-1 z-10">
-                        {!msg.approved && (
-                          <button onClick={async () => { await supabase.from('guestbook_messages').update({ approved: true }).eq('id', msg.id); }} className="bg-emerald-600 text-white p-2 rounded-xl text-xs font-bold shadow">
-                            Aprovar
-                          </button>
-                        )}
-                        <button onClick={async () => { await supabase.from('guestbook_messages').delete().eq('id', msg.id); }} className="bg-red-600 text-white p-2 rounded-xl text-xs font-bold shadow">
-                          Excluir
-                        </button>
-                      </div>
-                    )}
-                    <div className="aspect-video w-full bg-black">
-                      {msg.photo_url && <img src={msg.photo_url} className="w-full h-full object-cover" />}
-                    </div>
-                    <div className="p-3 flex flex-col justify-between flex-1">
-                      <p className="text-sm italic text-slate-200">"{msg.message || 'Curtindo o evento!'}"</p>
-                      <span className="text-xs font-black text-blue-400 mt-2 uppercase">{msg.guest_name}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </main>
-      </div>
-    );
+    return <TestScreen testSlug={testSlug} clientTestName={clientTestName} loadingTest={loadingTest} testExists={testExists} />;
   }
 
   if (isMaster) {
