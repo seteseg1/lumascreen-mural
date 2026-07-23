@@ -129,28 +129,44 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
               <button onClick={() => setTestSuccess(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">ENVIAR OUTRA</button>
             </div>
           ) : (
-            <form onSubmit={handleTestSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-6">
+            <form onSubmit={handleTestSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-5">
               <div className="text-center">
                 <h2 className="text-2xl font-black text-slate-900">Teste LumaScreen</h2>
                 <p className="text-blue-600 font-bold text-xs uppercase mt-1">Parceiro: {clientTestName}</p>
               </div>
-              <input type="text" placeholder="Seu Nome" value={testName} onChange={(e) => setTestName(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" required />
-              <textarea placeholder="Sua Mensagem" rows={2} value={testMsg} onChange={(e) => setTestMsg(e.target.value)} className="bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold resize-none" />
+
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Seu Nome</label>
+                <input type="text" placeholder="Digite seu nome" value={testName} onChange={(e) => setTestName(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" required />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">Recado especial</label>
+                <textarea placeholder="Sua mensagem..." rows={2} value={testMsg} onChange={(e) => setTestMsg(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold resize-none" />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase ml-2 mb-1 block">WhatsApp (Opcional)</label>
+                <input type="tel" placeholder="(00) 90000-0000" value={testWhatsapp} onChange={(e) => setTestWhatsapp(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" />
+              </div>
+
               <input type="file" accept="image/*" ref={testFileInputRef} onChange={() => {
                 const f = testFileInputRef.current?.files?.[0];
                 if(f) { const r = new FileReader(); r.onloadend = () => setTestPreviewUrl(r.result as string); r.readAsDataURL(f); }
               }} className="hidden" />
+
               {testPreviewUrl ? (
                 <div className="relative rounded-2xl overflow-hidden h-40">
                   <img src={testPreviewUrl} className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => setTestPreviewUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg text-xs">Remover</button>
+                  <button type="button" onClick={() => setTestPreviewUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg text-xs font-bold">Remover</button>
                 </div>
               ) : (
                 <button type="button" onClick={() => testFileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 py-6 rounded-2xl font-black text-slate-600 text-xs uppercase flex items-center justify-center gap-2">
                   <Camera className="w-6 h-6 text-blue-500" /> Tirar Foto / Enviar
                 </button>
               )}
-              <button type="submit" disabled={testLoading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">
+
+              <button type="submit" disabled={testLoading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg">
                 {testLoading ? <RefreshCw className="animate-spin mx-auto" /> : 'ENVIAR PARA O TELÃO DE TESTE'}
               </button>
             </form>
@@ -223,6 +239,7 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
                   <div className="p-3 flex flex-col justify-between flex-1">
                     <p className="text-sm italic text-slate-200">"{msg.message || 'Curtindo o evento!'}"</p>
                     <span className="text-xs font-black text-blue-400 mt-2 uppercase">{msg.guest_name}</span>
+                    {msg.whatsapp && <span className="text-xs text-slate-400 font-bold mt-1">Wpp: {msg.whatsapp}</span>}
                   </div>
                 </div>
               ))
@@ -621,7 +638,6 @@ export default function App() {
     setView('viewer');
   };
 
-  // Se estiver em rota de teste, renderiza o componente dedicado
   if (testSlug) {
     return <TestScreen testSlug={testSlug} clientTestName={clientTestName} loadingTest={loadingTest} testExists={testExists} />;
   }
