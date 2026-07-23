@@ -1,7 +1,7 @@
 import { PROHIBITED_WORDS } from './badWords';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, Trash2, Check, Smartphone, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Camera, Image as ImageIcon, Send, RefreshCw, CheckCircle, Trash2, Check, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminLogin from './AdminLogin'; 
@@ -36,6 +36,13 @@ interface Message {
 }
 
 export default function App() {
+  // Estados para rotas de Teste Isolado (/test/:slug)
+  const [testSlug, setTestSlug] = useState<string | null>(null);
+  const [clientTestName, setClientTestName] = useState<string>('');
+  const [loadingTest, setLoadingTest] = useState(true);
+  const [testExists, setTestExists] = useState(false);
+
+  // Estados originais do sistema
   const [view, setView] = useState<'totem' | 'mobile' | 'viewer' | 'gallery'>('totem');
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false); 
@@ -65,7 +72,45 @@ export default function App() {
   
   const masterChannelRef = useRef<any>(null);
 
+  // Detecta rota de teste ao carregar
   useEffect(() => {
+    const pathMatch = window.location.pathname.match(/^\/test\/(.+)$/);
+    if (pathMatch) {
+      const slug = pathMatch[1];
+      setTestSlug(slug);
+      verifyTestSession(slug);
+    } else {
+      setLoadingTest(false);
+    }
+  }, []);
+
+  const verifyTestSession = async (slug: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('mural_tests')
+        .select('*')
+        .eq('session_slug', slug)
+        .eq('is_active', true)
+        .single();
+
+      if (data && !error) {
+        setTestExists(true);
+        setClientTestName(data.client_name || 'Cliente');
+      } else {
+        setTestExists(false);
+      }
+    } catch (err) {
+      console.error('Erro ao verificar sessão de teste:', err);
+      setTestExists(false);
+    } finally {
+      setLoadingTest(false);
+    }
+  };
+
+  useEffect(() => {
+    // Se estivermos em rota de teste, não executa a config padrão de eventos
+    if (testSlug) return;
+
     const fetchEventConfig = async () => {
       const params = new URLSearchParams(window.location.search);
       const eventParam = params.get('event') || 'geral';
@@ -186,10 +231,10 @@ export default function App() {
         supabase.removeChannel(masterChannelRef.current);
       }
     };
-  }, []);
+  }, [testSlug]);
 
   useEffect(() => {
-    if (!currentEvent) return;
+    if (!currentEvent || testSlug) return;
 
     const fetchMessages = async () => {
       let query = supabase.from('guestbook_messages').select('*').eq('event_id', currentEvent);
@@ -273,10 +318,10 @@ export default function App() {
       supabase.removeChannel(channel); 
       clearInterval(pollingInterval);
     };
-  }, [view, currentEvent, isHardwareBlocked, isEventInvalid, isAdmin]);
+  }, [view, currentEvent, isHardwareBlocked, isEventInvalid, isAdmin, testSlug]);
 
   useEffect(() => {
-    if ((view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin || isHardwareBlocked || isEventInvalid) return;
+    if (testSlug || (view !== 'totem' && view !== 'viewer') || messages.length === 0 || isAdmin || isHardwareBlocked || isEventInvalid) return;
 
     let timeout: any;
 
@@ -301,7 +346,7 @@ export default function App() {
 
     handleRotation();
     return () => clearTimeout(timeout);
-  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex, isHardwareBlocked, isEventInvalid]);
+  }, [view, messages.length, isAdmin, showInterstellarQr, currentSlideIndex, isHardwareBlocked, isEventInvalid, testSlug]);
 
   const handleApproveMessage = async (id: string) => {
     try {
@@ -377,6 +422,57 @@ export default function App() {
     setSuccess(false);
     setView('viewer');
   };
+
+  // ==========================================
+  // RENDERIZAÇÃO DA ROTA DE TESTE ISOLADO (/test/:slug)
+  // ==========================================
+  if (testSlug) {
+    if (loadingTest) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans">
+          <p className="text-xl animate-pulse text-blue-400">Carregando ambiente de teste exclusivo...</p>
+        </div>
+      );
+    }
+
+    if (!testExists) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="max-w-md bg-slate-900 p-8 rounded-3xl border border-red-500/20 shadow-2xl">
+            <h2 className="text-2xl font-black text-red-400 mb-2">Link Inválido ou Expirado</h2>
+            <p className="text-slate-400">Este link de teste não está ativo ou não foi encontrado no sistema.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
+        <header className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center px-6">
+          <div className="max-w-[200px]">
+            <LogoLumaScreen />
+          </div>
+          <span className="bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-2 rounded-2xl text-xs font-black uppercase">
+            Sessão de Teste: {clientTestName}
+          </span>
+        </header>
+
+        <main className="flex-1 p-6 flex flex-col items-center justify-center max-w-2xl mx-auto w-full">
+          <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl w-full text-center space-y-6">
+            <h2 className="text-2xl font-black text-white">Ambiente de Teste do Cliente</h2>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              Este link é exclusivo para a demonstração ao parceiro <strong className="text-blue-400">{clientTestName}</strong>. O fluxo opera de forma independente.
+            </p>
+
+            <div className="border border-dashed border-slate-700 p-6 rounded-3xl bg-slate-950/50">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Identificador do Teste (Slug)</p>
+              <code className="text-blue-400 font-mono text-sm bg-blue-950/50 px-3 py-1 rounded-lg">{testSlug}</code>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (isMaster) {
     return <MasterAdmin />;
