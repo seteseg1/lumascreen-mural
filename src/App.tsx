@@ -150,7 +150,7 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
                 <input type="tel" placeholder="(00) 90000-0000" value={testWhatsapp} onChange={(e) => setTestWhatsapp(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" />
               </div>
 
-              <input type="file" accept="image/*" ref={testFileInputRef} onChange={() => {
+              <input type="file" accept="image/*" capture="user" ref={testFileInputRef} onChange={() => {
                 const f = testFileInputRef.current?.files?.[0];
                 if(f) { const r = new FileReader(); r.onloadend = () => setTestPreviewUrl(r.result as string); r.readAsDataURL(f); }
               }} className="hidden" />
@@ -161,9 +161,35 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
                   <button type="button" onClick={() => setTestPreviewUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-lg text-xs font-bold">Remover</button>
                 </div>
               ) : (
-                <button type="button" onClick={() => testFileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 py-6 rounded-2xl font-black text-slate-600 text-xs uppercase flex items-center justify-center gap-2">
-                  <Camera className="w-6 h-6 text-blue-500" /> Tirar Foto / Enviar
-                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (testFileInputRef.current) {
+                        testFileInputRef.current.setAttribute('capture', 'user');
+                        testFileInputRef.current.click();
+                      }
+                    }} 
+                    className="border-2 border-dashed border-slate-300 py-5 rounded-2xl bg-slate-50 flex flex-col items-center gap-1 transition-all text-center p-2"
+                  >
+                    <Camera className="w-6 h-6 text-blue-500" />
+                    <span className="font-black text-slate-700 text-[10px] uppercase">Tirar Selfie</span>
+                  </button>
+
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (testFileInputRef.current) {
+                        testFileInputRef.current.removeAttribute('capture');
+                        testFileInputRef.current.click();
+                      }
+                    }} 
+                    className="border-2 border-dashed border-slate-300 py-5 rounded-2xl bg-slate-50 flex flex-col items-center gap-1 transition-all text-center p-2"
+                  >
+                    <ImageIcon className="w-6 h-6 text-emerald-500" />
+                    <span className="font-black text-slate-700 text-[10px] uppercase">Galeria</span>
+                  </button>
+                </div>
               )}
 
               <button type="submit" disabled={testLoading} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg">
