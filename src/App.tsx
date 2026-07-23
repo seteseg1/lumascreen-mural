@@ -136,7 +136,7 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
 
               <a 
                 href={`/test/${testSlug}`} 
-                className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black py-4 rounded-2xl transition flex items-center justify-center gap-2 block text-center"
+                className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black py-4 rounded-2xl transition flex items-center justify-center gap-2 block text-center border border-emerald-200 shadow-sm"
               >
                 👀 VER MURAL DO TESTE NA TELA
               </a>
