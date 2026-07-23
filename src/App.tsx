@@ -122,11 +122,24 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center p-4 font-sans">
         <div className="w-full max-w-md flex-1 py-8">
           {testSuccess ? (
-            <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border border-slate-100 mt-12">
-              <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4 animate-bounce" />
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border border-slate-100 mt-12 space-y-4">
+              <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
               <h2 className="text-3xl font-black mb-2">Enviado para o Teste!</h2>
               <p className="text-slate-500 mb-6 font-medium">Sua foto foi enviada para a demonstração de {clientTestName}.</p>
-              <button onClick={() => setTestSuccess(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl">ENVIAR OUTRA</button>
+              
+              <button 
+                onClick={() => setTestSuccess(false)} 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg transition"
+              >
+                ENVIAR OUTRA FOTO
+              </button>
+
+              <a 
+                href={`/test/${testSlug}`} 
+                className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black py-4 rounded-2xl transition flex items-center justify-center gap-2 block text-center"
+              >
+                👀 VER MURAL DO TESTE NA TELA
+              </a>
             </div>
           ) : (
             <form onSubmit={handleTestSubmit} className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 flex flex-col gap-5">
@@ -150,7 +163,7 @@ function TestScreen({ testSlug, clientTestName, loadingTest, testExists }: { tes
                 <input type="tel" placeholder="(00) 90000-0000" value={testWhatsapp} onChange={(e) => setTestWhatsapp(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold" />
               </div>
 
-              <input type="file" accept="image/*" capture="user" ref={testFileInputRef} onChange={() => {
+              <input type="file" accept="image/*" ref={testFileInputRef} onChange={() => {
                 const f = testFileInputRef.current?.files?.[0];
                 if(f) { const r = new FileReader(); r.onloadend = () => setTestPreviewUrl(r.result as string); r.readAsDataURL(f); }
               }} className="hidden" />
